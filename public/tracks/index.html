@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Track library — Anomalradio.com</title>
+    <meta
+      name="description"
+      content="Every track in the Anomalradio catalogue: search, filter, play, star, add to basket or share."
+    />
+    <link rel="canonical" href="https://anomalradio.com/tracks/" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="icon" href="/assets/img/favicon-32.png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/assets/css/tokens.css" />
+    <link rel="stylesheet" href="/assets/css/base.css" />
+    <link rel="stylesheet" href="/assets/css/components.css" />
+    <link rel="stylesheet" href="/assets/css/player.css" />
+  </head>
+  <body data-page="library" data-nav="library">
+    <main class="container page stack-lg">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">catalogue</span>
+          <h1>Track library</h1>
+          <p class="muted text-sm" id="library-count">loading…</p>
+        </div>
+        <div class="row wrap">
+          <label class="field" for="library-search">
+            <span class="flex" aria-hidden="true"></span>
+            <input
+              id="library-search"
+              type="search"
+              placeholder="Search title, artist, album…"
+              autocomplete="off"
+            />
+          </label>
+          <label class="field" for="library-sort">
+            <select id="library-sort" aria-label="Sort">
+              <option value="album">Album order</option>
+              <option value="title">Title A→Z</option>
+              <option value="duration">Longest first</option>
+              <option value="bpm">Slowest BPM first</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <ul class="track-list panel panel--flush" id="library-list"></ul>
+
+      <p class="muted text-xs">
+        Every row plays through the protected stream endpoint. Star (★) keeps a track in your favourites, the
+        basket (🛒) collects tracks for checkout, and share (⇪) copies the track page — never an audio link.
+      </p>
+    </main>
+    <script type="module" src="/assets/js/pages.js"></script>
+  </body>
+</html>

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Track — Anomalradio.com</title>
+    <meta
+      name="description"
+      content="A track from the Anomalradio catalogue: play it, star it, add it to your basket or share it."
+    />
+    <meta name="theme-color" content="#000000" />
+    <link rel="icon" href="/assets/img/favicon-32.png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/assets/css/tokens.css" />
+    <link rel="stylesheet" href="/assets/css/base.css" />
+    <link rel="stylesheet" href="/assets/css/components.css" />
+    <link rel="stylesheet" href="/assets/css/player.css" />
+    <!-- M2 renders the per-track og:title / og:image / og:audio tags server-side so shared
+         links unfurl a rich card. The prototype keeps a generic card. -->
+    <meta property="og:type" content="music.song" />
+    <meta property="og:site_name" content="Anomalradio.com" />
+    <meta property="og:image" content="https://anomalradio.com/assets/img/og-default.jpg" />
+  </head>
+  <body data-page="track" data-nav="library">
+    <main class="container page">
+      <nav class="muted text-xs" aria-label="Breadcrumb">
+        <a href="/tracks/">Library</a> <span aria-hidden="true">/</span> <span>Track</span>
+      </nav>
+      <div id="track-detail" class="stack-lg"></div>
+    </main>
+    <script type="module" src="/assets/js/pages.js"></script>
+  </body>
+</html>

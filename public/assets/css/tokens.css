@@ -1,0 +1,129 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   ANOMALRADIO · design tokens
+   Derived from _data/logo/anomalradiocom-logo.jpeg — black canvas, white
+   wordmark, azure ".COM" + ECG waveform. Single accent colour, one scale.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Self-hosted fonts (SIL OFL 1.1, fetched by scripts/fetch-fonts.js) ── */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/inter-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/inter-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/inter-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/inter-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/orbitron-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/orbitron-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('../fonts/orbitron-900.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/jetbrains-mono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/jetbrains-mono-500.woff2') format('woff2');
+}
+
+:root {
+  /* ── surfaces ── */
+  --bg-0: #000000;
+  --bg-1: #04060a;
+  --bg-2: #080c13;
+  --panel: rgba(255, 255, 255, 0.035);
+  --panel-2: rgba(255, 255, 255, 0.055);
+  --panel-3: rgba(255, 255, 255, 0.09);
+  --line: rgba(255, 255, 255, 0.09);
+  --line-2: rgba(255, 255, 255, 0.18);
+
+  /* ── ink ── */
+  --ink: #ffffff;
+  --ink-2: #b7c1cf;
+  --ink-3: #7a8493;
+  --ink-4: #4b5462;
+
+  /* ── brand ── */
+  --accent: #1b8ef5;
+  --accent-2: #00e0ff;
+  --accent-soft: rgba(27, 142, 245, 0.14);
+  --accent-line: rgba(27, 142, 245, 0.42);
+  --accent-glow: 0 0 28px rgba(27, 142, 245, 0.45);
+  --live: #ff2e4c;
+  --ok: #28d17c;
+  --warn: #ffb02e;
+
+  /* ── type ── */
+  --font-display: 'Orbitron', 'Avenir Next Condensed', system-ui, sans-serif;
+  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* ── geometry ── */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-pill: 999px;
+  --header-h: 64px;
+  --playerbar-h: 86px;
+  --container: 1180px;
+
+  /* ── motion ── */
+  --t-fast: 120ms;
+  --t: 180ms;
+  --t-slow: 320ms;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* ── elevation ── */
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 32px rgba(0, 0, 0, 0.6);
+  --shadow-2: 0 24px 64px rgba(0, 0, 0, 0.75);
+
+  --z-header: 50;
+  --z-playerbar: 60;
+  --z-popover: 80;
+  --z-toast: 90;
+  --z-modal: 100;
+}

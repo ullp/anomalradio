@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Basket — Anomalradio.com</title>
+    <meta
+      name="description"
+      content="Tracks you collected for purchase. Checkout arrives with the shop milestone."
+    />
+    <meta name="theme-color" content="#000000" />
+    <link rel="icon" href="/assets/img/favicon-32.png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/assets/css/tokens.css" />
+    <link rel="stylesheet" href="/assets/css/base.css" />
+    <link rel="stylesheet" href="/assets/css/components.css" />
+    <link rel="stylesheet" href="/assets/css/player.css" />
+  </head>
+  <body data-page="cart" data-nav="">
+    <main class="container page stack-lg">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">shop</span>
+          <h1>Basket</h1>
+          <p class="muted text-sm" id="cart-summary"></p>
+        </div>
+        <button class="btn btn--sm" type="button" id="cart-clear">Empty basket</button>
+      </div>
+
+      <div class="console">
+        <section class="stack">
+          <ul class="track-list panel panel--flush" id="cart-list"></ul>
+          <div class="panel empty" id="cart-empty">
+            <h3>Your basket is empty</h3>
+            <p class="muted text-sm">
+              Use 🛒 on any track to collect it here. Streaming is always free — the basket is for buying
+              files.
+            </p>
+            <p><a class="btn btn--sm" href="/tracks/">Browse the library</a></p>
+          </div>
+        </section>
+
+        <aside class="stack">
+          <div class="panel stack">
+            <span class="stat__label">summary</span>
+            <div class="row-between">
+              <span class="muted">Subtotal</span>
+              <span class="stat__value mono" id="cart-total">€0.00</span>
+            </div>
+            <button class="btn btn--primary" type="button" id="cart-checkout" disabled>Checkout</button>
+            <p class="muted text-xs">
+              Two checkout options are on the table for M5: Stripe Checkout with watermarked, expiring
+              download links, or a simple hand-off to an external store link per track (no payment
+              infrastructure at all).
+            </p>
+          </div>
+          <div class="panel stack">
+            <span class="stat__label">why buy</span>
+            <p class="muted text-xs">
+              Purchases are the only sanctioned way to get a file, and each sold copy carries an ID3 watermark
+              tied to the order — which is a far better anti-piracy measure than any client-side blocking.
+            </p>
+          </div>
+        </aside>
+      </div>
+    </main>
+    <script type="module" src="/assets/js/pages.js"></script>
+  </body>
+</html>

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Favourites — Anomalradio.com</title>
+    <meta name="description" content="The tracks you starred on Anomalradio, with play-all and M3U export." />
+    <meta name="theme-color" content="#000000" />
+    <link rel="icon" href="/assets/img/favicon-32.png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/assets/css/tokens.css" />
+    <link rel="stylesheet" href="/assets/css/base.css" />
+    <link rel="stylesheet" href="/assets/css/components.css" />
+    <link rel="stylesheet" href="/assets/css/player.css" />
+  </head>
+  <body data-page="favourites" data-nav="favourites">
+    <main class="container page stack-lg">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">your station</span>
+          <h1>Favourites</h1>
+          <p class="muted text-sm" id="fav-summary"></p>
+        </div>
+        <div class="row wrap" id="fav-tools" hidden>
+          <button class="btn btn--primary btn--sm" type="button" id="fav-play-all">Play all</button>
+          <button class="btn btn--sm" type="button" id="fav-export">Export .m3u</button>
+          <button class="btn btn--sm" type="button" id="fav-clear">Clear</button>
+        </div>
+      </div>
+
+      <ul class="track-list panel panel--flush" id="fav-list"></ul>
+
+      <div class="panel empty" id="fav-empty">
+        <h3>Nothing starred yet</h3>
+        <p class="muted text-sm">
+          Press ★ on any track — in the library, on a track page, or on the docked player — and it lands here.
+        </p>
+        <p><a class="btn btn--sm" href="/tracks/">Browse the library</a></p>
+      </div>
+
+      <p class="muted text-xs">
+        Favourites live in this browser (anonymous owner key, no account). When accounts arrive, these rows
+        are claimed into your profile and sync across devices. The M3U export contains track page links, not
+        audio files.
+      </p>
+    </main>
+    <script type="module" src="/assets/js/pages.js"></script>
+  </body>
+</html>

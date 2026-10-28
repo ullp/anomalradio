@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>About the station — Anomalradio.com</title>
+    <meta
+      name="description"
+      content="How Anomalradio works: own music only, protected streaming, and an honest account of what can and cannot be prevented."
+    />
+    <link rel="canonical" href="https://anomalradio.com/about/" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="icon" href="/assets/img/favicon-32.png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/assets/css/tokens.css" />
+    <link rel="stylesheet" href="/assets/css/base.css" />
+    <link rel="stylesheet" href="/assets/css/components.css" />
+    <link rel="stylesheet" href="/assets/css/player.css" />
+  </head>
+  <body data-page="about" data-nav="about">
+    <main class="container page stack-lg">
+      <header class="stack">
+        <span class="eyebrow">about</span>
+        <h1>Anomalradio.com</h1>
+        <p class="lede">
+          A single station that plays only its own music, around the clock, from its own library. No label
+          feed, no licensed catalogue, no third-party player.
+        </p>
+      </header>
+
+      <section class="grid grid-2">
+        <article class="panel stack">
+          <h2>What you are listening to</h2>
+          <p>
+            The rotation is built from the station's own releases — currently the
+            <span id="about-album">catalogue</span>
+            — and loops in album order, with per-track weighting controls planned for the admin panel.
+          </p>
+          <p class="muted text-sm">
+            Now on air: <span id="live-onair">—</span> · up next: <span id="live-next">—</span> ·
+            <span id="live-listeners">—</span> listening
+          </p>
+        </article>
+
+        <article class="panel stack">
+          <h2>Two listening modes</h2>
+          <ul class="list-tight">
+            <li>
+              <strong>Live</strong> — you join mid-track and the station moves on without you. No seeking,
+              like broadcast radio.
+            </li>
+            <li>
+              <strong>On demand</strong> — you pick a track, it plays from the start and the queue continues
+              through the library.
+            </li>
+          </ul>
+          <p class="muted text-sm">
+            Both modes run through the same protected endpoint, and neither exposes a downloadable file URL.
+          </p>
+        </article>
+      </section>
+      <section class="panel stack" id="security">
+        <h2>Stream protection — the honest version</h2>
+        <p>
+          Anything a browser can play, a determined person can record. No client-side trick changes that, and
+          anyone promising “100% undownloadable” is selling something false. What this station actually does:
+        </p>
+        <ul class="list-tight">
+          <li>
+            <strong>Storage isolation</strong> — audio lives outside the web root (or in a private bucket) and
+            is never served as a file. Requests for <code>.mp3</code> paths return 404, not 403.
+          </li>
+          <li>
+            <strong>Opaque ids</strong> — the public world only ever sees ids like <code>ar_Kt0j2bAUde</code>;
+            the mapping to a real file exists only on the server.
+          </li>
+          <li>
+            <strong>Short-lived tokens</strong> — each stream request needs a signed token that expires in
+            about two minutes and is bound to the requesting IP and browser, so a copied URL is worthless
+            almost immediately.
+          </li>
+          <li>
+            <strong>Anti-ripper rules</strong> — known rippers and CLI tools are refused, requests without a
+            browser context are refused, and per-IP concurrency is capped.
+          </li>
+          <li>
+            <strong>Continuous stream (next milestone)</strong> — in live mode the listener will receive one
+            endless mount and no per-track resource at all, which is the strongest practical protection.
+          </li>
+          <li>
+            <strong>Watermarked purchases</strong> — files bought from the shop carry an order watermark, so
+            leaks can be traced back.
+          </li>
+        </ul>
+        <p class="muted text-sm">
+          Hard DRM (Widevine/FairPlay) is deliberately not used: it requires a licence server, breaks some
+          browsers, and costs more than it protects for a station of this size.
+        </p>
+      </section>
+
+      <section class="grid grid-2">
+        <article class="panel stack" id="terms">
+          <h2>Terms of use</h2>
+          <ul class="list-tight">
+            <li>Listening is free; the music stays the property of its authors.</li>
+            <li>Recording, ripping, redistributing or re-uploading the stream is not permitted.</li>
+            <li>
+              Do not hotlink, embed or proxy the audio endpoints on other sites; use the player or the embed
+              widget.
+            </li>
+            <li>Favourites and baskets are stored in your browser; no account is required.</li>
+          </ul>
+        </article>
+
+        <article class="panel stack" id="privacy">
+          <h2>Privacy</h2>
+          <ul class="list-tight">
+            <li>
+              No third-party analytics, no ad trackers, no fingerprinting, no external font or script CDNs.
+            </li>
+            <li>One functional cookie stores an anonymous owner key for your favourites and basket.</li>
+            <li>Stream requests are logged with hashed IP and User-Agent purely for abuse protection.</li>
+            <li>
+              Payments (when the shop opens) are handled by the payment provider; card data never touches this
+              server.
+            </li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="panel stack" id="contact">
+        <h2>Contact</h2>
+        <p>
+          Music, licensing, press or takedown requests:
+          <a href="mailto:hello@anomalradio.com">hello@anomalradio.com</a>
+        </p>
+        <p class="muted text-xs">
+          Prototype build M1 — the design and the player are live; the production backend (private storage,
+          real signed tokens, continuous Icecast stream, shop) follows in the next milestones.
+        </p>
+      </section>
+    </main>
+    <script type="module" src="/assets/js/pages.js"></script>
+  </body>
+</html>

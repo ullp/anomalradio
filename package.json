@@ -1,0 +1,29 @@
+{
+  "name": "anomalradio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Anomalradio.com — 24/7 own-music radio: protected streaming, library, favourites, cart and share.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "dev": "node scripts/serve.js",
+    "start": "node scripts/serve.js",
+    "import": "node scripts/import-tracks.js",
+    "test": "node --test tests/",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "keywords": [
+    "radio",
+    "music",
+    "streaming",
+    "audio"
+  ],
+  "devDependencies": {
+    "eslint": "^9.15.0",
+    "prettier": "^3.4.1"
+  }
+}

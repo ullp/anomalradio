@@ -1,0 +1,36 @@
+# ── Audio / media: NEVER commit music (public repo + GitHub 100 MB file limit) ──
+*.mp3
+*.m4a
+*.flac
+*.wav
+*.aac
+*.ogg
+*.opus
+_data/music/
+media/
+_data/_incoming/
+
+# ── Secrets ──
+.env
+.env.*
+!.env.example
+
+# ── Runtime data ──
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/backups/
+*.log
+logs/
+
+# ── Dependencies / tooling ──
+node_modules/
+.npm/
+coverage/
+.eslintcache
+
+# ── OS / editor ──
+.DS_Store
+Thumbs.db
+*.swp
+.idea/

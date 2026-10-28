@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Anomalradio.com — own music only, 24/7</title>
+    <meta
+      name="description"
+      content="Anomalradio.com streams its own electronic catalogue around the clock. Live radio, a full track library, favourites, and protected playback — no downloads, no hotlinks."
+    />
+    <link rel="canonical" href="https://anomalradio.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Anomalradio.com — own music only, 24/7" />
+    <meta
+      property="og:description"
+      content="Own electronic music, broadcast around the clock. Live radio, library, favourites."
+    />
+    <meta property="og:image" content="https://anomalradio.com/assets/img/og-default.jpg" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="icon" href="/assets/img/favicon-32.png" sizes="32x32" />
+    <link rel="icon" href="/assets/img/favicon-16.png" sizes="16x16" />
+    <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/assets/css/tokens.css" />
+    <link rel="stylesheet" href="/assets/css/base.css" />
+    <link rel="stylesheet" href="/assets/css/components.css" />
+    <link rel="stylesheet" href="/assets/css/player.css" />
+  </head>
+  <body data-page="home" data-nav="">
+    <main>
+      <section class="hero">
+        <div class="grid-bg"></div>
+        <div class="glow"></div>
+        <div class="container hero__inner">
+          <div class="stack stack-lg">
+            <img
+              class="hero__logo"
+              src="/assets/img/logo-full.png"
+              alt="Anomalradio.com"
+              width="340"
+              height="230"
+            />
+            <h1 class="hero__tagline">Own music only. <em>Broadcasting 24/7</em> from the anomaly.</h1>
+            <p class="lede">
+              Anomalradio plays a hand-built catalogue of electronic music — nothing licensed from anyone
+              else, nothing scraped. Tune in live and you join the set mid-track, exactly like broadcast
+              radio.
+            </p>
+            <div class="hero__cta">
+              <button class="btn btn--primary btn--lg" type="button" data-action="tune-in">
+                <span aria-hidden="true">▶</span> Tune in live
+              </button>
+              <a class="btn btn--lg" href="/tracks/">Browse the library</a>
+              <a class="btn btn--ghost btn--lg" href="/player/">Radio console</a>
+            </div>
+            <div class="hero__stats" id="hero-stats"></div>
+          </div>
+
+          <div class="hero__panel stack">
+            <div class="viz viz--ecg"><canvas id="hero-viz" aria-hidden="true"></canvas></div>
+            <div class="panel panel--tight stack">
+              <div class="row-between">
+                <span class="stat__label">on air now</span>
+                <span class="pill pill--ghost" id="live-cycle">—</span>
+              </div>
+              <div class="now" id="now-card"></div>
+              <div class="row-between muted text-xs">
+                <span>next up: <span id="live-next">—</span></span>
+                <span><span id="live-listeners">—</span> listening</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="container page stack-lg">
+        <section>
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">recently played</span>
+              <h2>Last tracks on air</h2>
+            </div>
+            <a class="btn btn--sm" href="/player/">Full history</a>
+          </div>
+          <ul class="track-list panel panel--flush" id="recent-list"></ul>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">library</span>
+              <h2>Featured tracks</h2>
+            </div>
+            <a class="btn btn--sm" href="/tracks/">All tracks</a>
+          </div>
+          <div class="cards" id="featured"></div>
+        </section>
+
+        <section class="grid grid-2">
+          <article class="panel stack">
+            <span class="eyebrow">how it works</span>
+            <h3>Two ways to listen, one engine</h3>
+            <p>
+              <strong>Live</strong> joins the broadcast where it is right now — you cannot seek, because it is
+              radio. <strong>On demand</strong> plays a specific track from the start and rolls on through the
+              library.
+            </p>
+            <ul class="list-tight">
+              <li>★ star a track to keep it in your favourites (no account needed)</li>
+              <li>🛒 add it to your basket — checkout lands in the next milestone</li>
+              <li>⇪ share the track page; the audio itself is never shared as a link</li>
+            </ul>
+          </article>
+
+          <article class="panel stack">
+            <span class="eyebrow">protection</span>
+            <h3>Streamed, never handed over</h3>
+            <p>
+              Audio is stored outside the web root and addressed by opaque ids. Every stream request needs a
+              short-lived token bound to your IP and browser, so a copied URL is worthless within two minutes.
+            </p>
+            <p class="muted text-sm">
+              Straight talk: anything you can hear, you can record. What this setup stops is the realistic
+              threat — hotlinking, bots and stream rippers.
+            </p>
+            <p><a href="/about/#security">Read the full security model →</a></p>
+          </article>
+        </section>
+      </div>
+    </main>
+    <script type="module" src="/assets/js/pages.js"></script>
+  </body>
+</html>
