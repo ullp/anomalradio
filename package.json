@@ -2,11 +2,11 @@
   "name": "anomalradio",
   "version": "0.1.0",
   "private": true,
-  "description": "Anomalradio.com — 24/7 own-music radio: protected streaming, library, favourites, cart and share.",
+  "description": "Anomalradio.com \u2014 24/7 own-music radio: protected streaming, library, favourites, cart and share.",
   "license": "UNLICENSED",
   "type": "module",
   "engines": {
-    "node": ">=20.6"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "node scripts/serve.js",
