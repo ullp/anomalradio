@@ -5,6 +5,8 @@
    M4/M8 can claim these rows into a real account later).
    ═══════════════════════════════════════════════════════════════════════ */
 
+import * as api from './api.js';
+
 const STORAGE_KEY = 'anomalradio.v1';
 
 const defaults = {
@@ -70,12 +72,29 @@ const slim = (track) => ({
 
 export const isFavourite = (id) => state.favourites.some((t) => t.id === id);
 
+/**
+ * Replace the local list with the server's — used after a sync, and after signing in (when the
+ * account's stars become authoritative). The local copy stays as an offline cache.
+ */
+export function setFavourites(list) {
+  state.favourites = (list ?? []).map(slim);
+  persist();
+}
+
 export function toggleFavourite(track) {
   const index = state.favourites.findIndex((t) => t.id === track.id);
-  if (index >= 0) state.favourites.splice(index, 1);
-  else state.favourites.unshift(slim(track));
+  const on = index < 0;
+  if (on) state.favourites.unshift(slim(track));
+  else state.favourites.splice(index, 1);
   persist();
-  return isFavourite(track.id);
+
+  // Keep the server in step, but never make the UI wait for the network: a star appears instantly
+  // and the request catches up. Signed out this is the anonymous owner's list; signed in, it is
+  // the account's — the same endpoints either way.
+  if (!api.isStatic()) {
+    (on ? api.starTrack(track.id) : api.unstarTrack(track.id)).catch(() => {});
+  }
+  return on;
 }
 
 export const favourites = () => state.favourites;

@@ -28,8 +28,9 @@
         </div>
       </div>
 
-      <ul class="track-list panel panel--flush" id="fav-list"></ul>
+      <section class="panel stack" id="account-panel" hidden></section>
 
+      <ul class="track-list panel panel--flush" id="fav-list"></ul>
       <div class="panel empty" id="fav-empty">
         <h3>Nothing starred yet</h3>
         <p class="muted text-sm">
@@ -39,9 +40,9 @@
       </div>
 
       <p class="muted text-xs">
-        Favourites live in this browser (anonymous owner key, no account). When accounts arrive, these rows
-        are claimed into your profile and sync across devices. The M3U export contains track page links, not
-        audio files.
+        Favourites work without an account: they are stored on the station against an anonymous key in this
+        browser. Sign in above and they are claimed into your account and sync across devices. The M3U export
+        contains track page links, not audio files.
       </p>
     </main>
     <script type="module" src="/assets/js/pages.js"></script>

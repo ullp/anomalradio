@@ -76,7 +76,8 @@ for (const track of result.tracks) {
 
 console.log(
   `\n  ✓ ${result.tracks.length} track(s) · ${mmss(result.totalDurationMs)} total · ` +
-    `${result.stored} copied to storage · ${result.unchanged} already stored`,
+    `${result.stored} copied to storage · ${result.unchanged} already stored · ` +
+    `${result.previews} preview(s) generated`,
 );
 console.log(`  export ${path.relative(process.cwd(), args.out)}`);
 console.log('  ● published   ○ draft (use --publish, or the admin in M6)');

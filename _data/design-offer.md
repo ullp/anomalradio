@@ -743,6 +743,40 @@ Verification: 180 tests. Every deploy assertion was additionally checked by **mu
 was broken deliberately and the suite confirmed to fail. What is _not_ verified here is the part that
 needs your account: instance creation, the VCN rules, the DNS change, and Let's Encrypt issuance.
 
+## 11d. M4 — favourites with accounts, share counters, previews
+
+**Sign-in is a magic link.** No password is stored, so there is none to leak, reuse or phish: the
+link token is single-use, expires in 15 minutes, and only its SHA-256 is kept — the database is not a
+credential store, and a dump of it cannot be replayed against the station. The session lives in an
+`HttpOnly`, `SameSite=Lax` cookie and is revoked by deleting one row.
+
+**Signing in keeps what you already had.** This is what the M2 schema was shaped for:
+`favourites.owner_key` holds either `own_<random>` (the anonymous cookie) or `usr_<id>` (an account),
+so a claim is a single `UPDATE OR IGNORE` + `DELETE` on that column — the `UNIQUE (owner_key,
+track_id)` constraint does the de-duplication, and no account ever ends up with a track twice.
+
+**⇪ share counters** are denormalised onto `tracks.shares` for the number the UI shows, with a
+`share_events` row per share so the channel breakdown is answerable later. The channel is validated
+against a known list; anything else is counted as `unknown` rather than trusted.
+
+**Previews are the one deliberate exception** to the audio gating, and it is documented on `/about`
+rather than hidden: a 30-second, 96 kbps mono, faded-out excerpt generated _separately_ from the
+master (never a slice of it). It has no stream token because a preview exists to be heard by people
+who have never been to the site — that is the whole point of one. The master keeps every gate.
+
+**Mail has no SMTP driver on purpose**: OCI blocks outbound port 25 on every tenancy, so an SMTP
+attempt would fail as "the e-mail never arrived" with nothing in the log to explain it. Drivers:
+`console` (the journal), `memory` (tests / not configured yet), `http` (a transactional API).
+
+Verification: 221 tests, including that a link cannot be replayed or used after expiry, that the
+token appears nowhere in the database, that signing in keeps and de-duplicates the stars collected
+beforehand, that the excerpt is mono and shorter than the master, and that the master still refuses
+to stream without a token. The client store is tested in Node with a minimal browser, so "a ★ reaches
+the right endpoint" is asserted rather than assumed.
+
+Not done in M4, and deliberately: the basket still lives in the browser (M5 moves it server-side with
+the same owner-key claim), and `/admin` (M6) has no user list yet.
+
 ## 12. Decisions I need from you
 
 | #   | Question                                                                                                                                                                                                                              | Why it matters          | My recommendation                                      |

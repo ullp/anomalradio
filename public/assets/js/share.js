@@ -6,10 +6,28 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 import { h, icon, toast, copyText } from './ui.js';
+import * as api from './api.js';
 
 export const trackUrl = (track) => `${location.origin}/track/${track.id}`;
 
 const trackText = (track) => `${track.artist} — ${track.title} · Anomalradio.com`;
+
+/**
+ * Count the share, and update any counter on the page.
+ *
+ * Deliberately fire-and-forget: counting is a nicety, and nobody should see an error because a
+ * tally failed. The number shown is the server's, not a local guess, so it cannot drift.
+ */
+function report(track, channel) {
+  api
+    .reportShare(track.id, channel)
+    .then(({ shares }) => {
+      for (const node of document.querySelectorAll(`[data-share-count="${track.id}"]`)) {
+        node.textContent = shares === 1 ? '1 share' : `${shares} shares`;
+      }
+    })
+    .catch(() => {});
+}
 
 export function shareTargets(track) {
   const url = encodeURIComponent(trackUrl(track));
@@ -35,6 +53,7 @@ export async function copyTrackLink(track) {
   toast(ok ? `Link copied — ${track.title}` : 'Could not access the clipboard', {
     iconName: ok ? 'check' : 'info',
   });
+  if (ok) report(track, 'copy');
   return ok;
 }
 
@@ -42,6 +61,7 @@ export async function nativeShare(track) {
   if (!navigator.share) return false;
   try {
     await navigator.share({ title: trackText(track), text: trackText(track), url: trackUrl(track) });
+    report(track, 'native');
     return true;
   } catch {
     return false; // user dismissed the sheet
@@ -81,6 +101,7 @@ export function openShare(anchor, track) {
           href: target.href,
           target: '_blank',
           rel: 'noopener noreferrer nofollow',
+          onClick: () => report(track, target.key),
         },
         h('span', { class: 'flex', html: icon(target.key) }),
         target.label,

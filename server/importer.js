@@ -25,9 +25,9 @@ import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { config, storageKeys } from './config.js';
 import { closeDatabase, one, openDatabase, upsertTrack } from './db.js';
+import { makePreview, normaliseToLufs, probe } from './ffprobe.js';
 import { sanitizeTrack } from './library.js';
 import { createStorage, hashFile } from './storage/index.js';
-import { normaliseToLufs, probe } from './ffprobe.js';
 
 const AUDIO_EXT = new Set(['.mp3', '.m4a', '.flac', '.wav', '.aac', '.ogg', '.opus']);
 const ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
@@ -119,6 +119,7 @@ export async function importLibrary(options = {}) {
   const tracks = [];
   let stored = 0;
   let unchanged = 0;
+  let previews = 0;
 
   for (const file of files) {
     const relPath = path.relative(source, file).split(path.sep).join('/');
@@ -173,11 +174,42 @@ export async function importLibrary(options = {}) {
       await storage.put(streamKey, normalised);
     }
 
+    // ── preview (M4): a short, low-bitrate excerpt, generated once ──
+    // Idempotent: if the excerpt is already in storage it is not regenerated, so re-running the
+    // import after adding one file does not re-encode the whole catalogue.
+    let previewKey = existing?.preview_key ?? null;
+    if (config.preview.enabled && !options.noPreview) {
+      const key = storageKeys.preview(id);
+      if (await storage.exists(key)) {
+        previewKey = key;
+      } else {
+        const { mkdtemp, rm } = await import('node:fs/promises');
+        const { tmpdir } = await import('node:os');
+        const scratch = await mkdtemp(path.join(tmpdir(), 'anomalradio-preview-'));
+        try {
+          const target = path.join(scratch, 'preview.mp3');
+          await makePreview(file, target, {
+            seconds: config.preview.seconds,
+            bitrate: config.preview.bitrate,
+            channels: config.preview.channels,
+            startRatio: config.preview.startRatio,
+            durationMs: metadata.durationMs,
+          });
+          await storage.put(key, target);
+          previewKey = key;
+          previews += 1;
+        } finally {
+          await rm(scratch, { recursive: true, force: true });
+        }
+      }
+    }
+
     const saved = upsertTrack({
       ...metadataFields(metadata, info, relPath),
       id,
       storageKey,
       streamKey,
+      previewKey,
       contentHash,
       isrc: metadata.tags.isrc ?? null,
       coverKey: existing?.cover_key ?? previousRow?.coverKey ?? null,
@@ -206,7 +238,7 @@ export async function importLibrary(options = {}) {
   if (!options.dryRun) await writeExport(out, tracks, totalDurationMs);
   if (writes) closeDatabase();
 
-  return { tracks, stored, unchanged, totalDurationMs };
+  return { tracks, stored, unchanged, previews, totalDurationMs };
 }
 
 /** Metadata shared by the export and the database row. */

@@ -153,3 +153,47 @@ export function subscribeNowPlaying(onState, onError = () => {}) {
     if (poller) clearInterval(poller);
   };
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   M4 — accounts, ★ favourites, ⇄ shares, previews.
+   Favourites work signed out (an anonymous owner cookie) and signed in (an
+   account): the same endpoints either way, and the server becomes the
+   authority once a page has synced. Sign-in is a magic link — there is no
+   password anywhere to leak.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const json = (method, body) => ({
+  method,
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify(body),
+});
+
+/** The caller's stars: `{ signedIn, email, count, tracks }`. */
+export const getFavourites = () =>
+  isStatic()
+    ? Promise.resolve({ signedIn: false, email: null, count: 0, tracks: [] })
+    : request('/api/favourites');
+
+export const starTrack = (trackId) => request('/api/favourites', json('POST', { trackId }));
+
+export const unstarTrack = (trackId) =>
+  request(`/api/favourites/${encodeURIComponent(trackId)}`, { method: 'DELETE' });
+
+/** Count a share. The sharing happens in the browser; this is the tally. */
+export const reportShare = (trackId, channel) =>
+  request(`/api/tracks/${encodeURIComponent(trackId)}/share`, json('POST', { channel }));
+
+/** Who is signed in, if anyone. */
+export const getAccount = () =>
+  isStatic() ? Promise.resolve({ signedIn: false, email: null }) : request('/api/auth/session');
+
+/** Ask for a sign-in link. Outside production the response carries the link, for convenience. */
+export const requestSignInLink = (email) => request('/api/auth/magic-link', json('POST', { email }));
+
+export const signOut = () => request('/api/auth/logout', { method: 'POST' });
+
+/**
+ * The short public excerpt — the one audio URL that needs no token, because a preview exists to be
+ * heard by people who are not on the site yet. Thirty seconds of 96 kbps mono, not the master.
+ */
+export const previewUrl = (trackId) => `/api/preview/${encodeURIComponent(trackId)}`;

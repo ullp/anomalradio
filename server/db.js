@@ -184,11 +184,13 @@ export function rowToTrack(row) {
     weight: row.weight,
     plays: row.plays,
     stars: row.stars,
+    shares: row.shares ?? 0,
     addedAt: row.added_at,
     updatedAt: row.updated_at,
     // ── server-side only: stripped by sanitizeTrack() ──
     storageKey: row.storage_key,
     streamKey: row.stream_key,
+    previewKey: row.preview_key,
     sourcePath: row.source_path,
     originalName: row.original_name,
   };
@@ -232,6 +234,7 @@ function toRow(track, existing) {
     size_bytes: track.sizeBytes,
     content_hash: track.contentHash ?? null,
     cover_key: track.coverKey ?? null,
+    preview_key: track.previewKey ?? null,
     price_cents: track.priceCents ?? 199,
     currency: track.currency ?? 'EUR',
     buy_url: track.buyUrl ?? null,

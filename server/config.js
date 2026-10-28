@@ -108,6 +108,8 @@ export const config = {
   maxStreamsPerIp: int(process.env.MAX_STREAMS_PER_IP, 3),
   sessionRateLimit: int(process.env.SESSION_RATE_LIMIT, 60),
   audioRateLimit: int(process.env.AUDIO_RATE_LIMIT, 600),
+  /** State-changing endpoints (★, 🛒, ⇪) per minute per IP — generous, but not unlimited. */
+  writeRateLimit: int(process.env.WRITE_RATE_LIMIT, 120),
   /**
    * Honour X-Forwarded-For — but only from a trusted proxy peer (loopback), because the header
    * is attacker-controlled. Set to false to ignore it entirely.
@@ -133,6 +135,54 @@ export const config = {
     'https://*.anomalradio.com',
   ]),
 
+  /** Absolute origin used in e-mails and share links (no trailing slash). */
+  publicOrigin: text(process.env.PUBLIC_ORIGIN, 'http://localhost:3000').replace(/\/+$/, ''),
+
+  /* ── accounts (M4): magic links, no passwords ── */
+  accounts: {
+    cookieName: text(process.env.SESSION_COOKIE, 'anomalradio_session'),
+    /**
+     * The anonymous favourites key. Not HttpOnly on purpose: the client reads it too, and it
+     * authorises nothing but its owner's own star list.
+     */
+    ownerCookieName: text(process.env.OWNER_COOKIE, 'anomalradio_owner'),
+    /** A sign-in link is single-use and short-lived: long enough to switch device, short enough to matter. */
+    magicLinkTtlSeconds: int(process.env.MAGIC_LINK_TTL, 15 * 60),
+    sessionTtlSeconds: int(process.env.SESSION_TTL, 60 * 24 * 3600),
+    /** Sign-in requests per IP per minute — the one endpoint an anonymous visitor can make us send mail from. */
+    requestRateLimit: int(process.env.MAGIC_LINK_RATE_LIMIT, 5),
+    /** Per address, so one IP cannot be used to flood a mailbox either. */
+    requestPerEmailLimit: int(process.env.MAGIC_LINK_EMAIL_LIMIT, 3),
+  },
+
+  /* ── mail: how a sign-in link leaves the building ── */
+  mail: {
+    /**
+     * console — the link is printed to the journal (development, and a station with no provider yet)
+     * http    — POST the message to a transactional API (Resend/Mailgun/Postmark-shaped)
+     *
+     * There is no SMTP driver on purpose: OCI blocks outbound port 25 on every tenancy, so SMTP
+     * from the box would fail in a way that only shows up as "the e-mail never arrived".
+     */
+    driver: text(process.env.MAIL_DRIVER, 'console'),
+    from: text(process.env.MAIL_FROM, 'Anomalradio <no-reply@anomalradio.com>'),
+    apiUrl: text(process.env.MAIL_API_URL),
+    apiKey: text(process.env.MAIL_API_KEY),
+  },
+
+  /* ── per-track preview (M4): a short, deliberately degraded excerpt ── */
+  preview: {
+    enabled: bool(process.env.PREVIEW_ENABLED, true),
+    seconds: int(process.env.PREVIEW_SECONDS, 30),
+    /** 96 kbps mono: ~360 KB, good enough to judge a track, useless as a copy of it. */
+    bitrate: text(process.env.PREVIEW_BITRATE, '96k'),
+    channels: int(process.env.PREVIEW_CHANNELS, 1),
+    /** Where the excerpt starts, as a fraction of the track (skips the intro). */
+    startRatio: float(process.env.PREVIEW_START_RATIO, 0.25),
+    /** Audio previews are public by design (see offer §8.3), so they get their own limiter. */
+    rateLimit: int(process.env.PREVIEW_RATE_LIMIT, 120),
+  },
+
   storage: {
     driver: text(process.env.STORAGE_DRIVER, 'local'),
     /** local driver: directory that holds the private masters (outside the web root). */
@@ -156,6 +206,8 @@ export const storageKeys = {
   track: (id, extension = 'mp3') => `tracks/${id}.${extension}`,
   streamMaster: (id, extension = 'mp3') => `stream/${id}.${extension}`,
   cover: (id, extension = 'webp') => `covers/${id}.${extension}`,
+  /** The short public excerpt generated at import — never the master. */
+  preview: (id, extension = 'mp3') => `previews/${id}.${extension}`,
 };
 
 /** Fail fast on configuration that would silently weaken the service. */
@@ -170,6 +222,16 @@ export function assertUsableConfig() {
     if (missing.length > 0) {
       throw new Error(`STORAGE_DRIVER=s3 requires: ${missing.map((key) => `S3_${key}`).join(', ')}`);
     }
+  }
+  if (!['console', 'http', 'memory'].includes(config.mail.driver)) {
+    throw new Error(`unknown MAIL_DRIVER "${config.mail.driver}" (expected console, memory or http)`);
+  }
+  if (config.mail.driver === 'http' && (!config.mail.apiUrl || !config.mail.apiKey)) {
+    throw new Error('MAIL_DRIVER=http requires MAIL_API_URL and MAIL_API_KEY');
+  }
+  if (config.isProduction && !config.publicOrigin.startsWith('https://')) {
+    // A sign-in link over http is a link anyone on the path can steal.
+    throw new Error(`PUBLIC_ORIGIN must be https in production (got "${config.publicOrigin}")`);
   }
   return true;
 }

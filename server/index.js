@@ -19,6 +19,7 @@ import { createRouter } from './routes.js';
 import { createSecurity } from './security.js';
 import { createStorage } from './storage/index.js';
 import { createTokenService } from './tokens.js';
+import { createAccounts } from './accounts.js';
 
 export function createServer(overrides = {}) {
   assertUsableConfig();
@@ -29,7 +30,9 @@ export function createServer(overrides = {}) {
   const security = overrides.security ?? createSecurity();
   // The continuous mount. Started below; it only reads audio once a listener is connected.
   const radio = overrides.radio ?? createRadio({ storage });
-  const router = createRouter({ security, tokens, storage, radio });
+  // Accounts (M4): magic links, sessions, and the owner key that ties stars to a caller.
+  const accounts = overrides.accounts ?? createAccounts();
+  const router = createRouter({ security, tokens, storage, radio, accounts });
 
   const server = createHttpServer((req, res) => {
     const origin = `http://${req.headers.host ?? `localhost:${config.port}`}`;
@@ -50,7 +53,7 @@ export function createServer(overrides = {}) {
   });
 
   return Object.assign(server, {
-    anomalradio: { storage, tokens, security, router, radio, database },
+    anomalradio: { storage, tokens, security, router, radio, database, accounts },
   });
 }
 
@@ -86,6 +89,7 @@ export function banner(server) {
     `  clock       ×${config.timeScale}${config.timeScale === 1 ? ' (real time)' : ''}`,
     `  mount       ${config.mountPath} · ${config.streamBitrate} kbps nominal · ICY every ${config.icyMetaInterval} B`,
     `  station     /radio.pls and /radio.m3u for VLC/foobar`,
+    `  accounts    magic links · mail via ${config.mail.driver}${config.mail.driver === 'console' ? ' (links go to this journal)' : ''}`,
   ];
   if (state) {
     lines.push(`  on air now  ${state.now.track.artist} — ${state.now.track.title}`);
@@ -101,6 +105,7 @@ export function banner(server) {
 /** Test surface: everything the suites reach into. */
 export { config, sanitizeTrack, broadcastState, createSecurity, createTokenService, createRadio };
 export { closeDatabase };
+export { getMailer } from './mail.js';
 
 /* ─────────────────────────── CLI entry point ─────────────────────────── */
 

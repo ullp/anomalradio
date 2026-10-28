@@ -5,7 +5,7 @@ Website and 24/7 radio for **[Anomalradio.com](https://anomalradio.com)** — a 
 > **Status: M3.** The catalogue lives in SQLite, audio lives in private storage outside the web root (this
 > machine's disk, or any S3-compatible bucket), stream tokens are real HMACs with a request cap, and shared track
 > links unfurl with proper meta tags, and **live mode is a real continuous stream**: one endless mount with
-> ICY metadata, fanned out to every listener and paced to real time. Still to come: accounts (M4), the shop (M5),
+> ICY metadata, fanned out to every listener and paced to real time. Favourites live on the station with magic-link accounts (M4). Still to come: the shop (M5),
 > the admin (M6) and running it on a Node host (M7) — see
 > [`_data/design-offer.md`](_data/design-offer.md).
 
@@ -113,16 +113,22 @@ Keyboard: `space` play/pause · `←/→` seek · `↑/↓` volume · `S` star �
 
 ## API (prototype shape — production keeps the same contract)
 
-| Endpoint                      | Purpose                                                         |
-| ----------------------------- | --------------------------------------------------------------- |
-| `GET /api/playlist`           | published tracks, **without** any storage path                  |
-| `GET /api/tracks/:id`         | one track's public metadata                                     |
-| `GET /api/now-playing`        | on-air snapshot: current track, next, last 15, listeners        |
-| `GET /api/now-playing/stream` | the same, as server-sent events                                 |
-| `GET /api/radio`              | what live mode needs: current track + how far in we already are |
-| `GET /api/session`            | mint a short-lived stream token (requires a browser context)    |
-| `GET /api/stream/:id?t=…`     | audio, gated by that token, with HTTP range support             |
-| `GET /healthz`                | liveness                                                        |
+| Endpoint                                 | Purpose                                                          |
+| ---------------------------------------- | ---------------------------------------------------------------- |
+| `GET /api/playlist`                      | published tracks, **without** any storage path                   |
+| `GET /api/tracks/:id`                    | one track's public metadata, plus `starred` for the caller       |
+| `GET /api/now-playing`                   | on-air snapshot: current track, next, last 15, listeners         |
+| `GET /api/now-playing/stream`            | the same, as server-sent events                                  |
+| `GET /api/radio`                         | what live mode needs: current track + how far in we already are  |
+| `GET /api/session`                       | mint a short-lived stream token (requires a browser context)     |
+| `GET /api/stream/:id?t=…`                | audio, gated by that token, with HTTP range support              |
+| `GET /api/preview/:id`                   | the 30 s public excerpt — no token, and never the master (M4)    |
+| `GET`/`POST`/`DELETE` `/api/favourites`  | the caller's ★ list (account, or an anonymous owner cookie) (M4) |
+| `POST /api/tracks/:id/share`             | ⇪ count a share; returns the new total (M4)                      |
+| `POST /api/auth/magic-link`              | e-mail a single-use sign-in link (M4)                            |
+| `GET /api/auth/verify?token=…`           | consume the link, set the session cookie (M4)                    |
+| `GET /api/auth/session` · `POST /logout` | who is signed in; end it (M4)                                    |
+| `GET /healthz`                           | liveness                                                         |
 
 ## Security model
 
@@ -165,7 +171,7 @@ them into SQLite (the `stream_tokens` table already records every issued token) 
 ## Testing
 
 ```bash
-npm test                            # all suites (~30 s, 180 cases)
+npm test                            # all suites (~35 s, 221 cases)
 npm test -- tests/security.test.js  # one file
 ```
 
@@ -182,6 +188,11 @@ download, and a station file that no player could actually use.
 | `tokens.test.js`          | HMAC signature, expiry, track/IP/browser binding, the request cap, revocation, per-IP stats                                                     |
 | `radio.test.js`           | the mount: gating, ICY headers, real-time pacing, fan-out, play history, and the browser→player station-file handoff                            |
 | `deploy.test.js`          | the production boundary: X-Forwarded-For is overwritten not appended, the mount is never buffered, the unit is confined, no secret is committed |
+| `accounts.test.js`        | magic links: single use, expiry, per-address rate limits, hashed tokens, and that signing in **keeps** the stars you already had                |
+| `favourites.test.js`      | ★ and ⇄: per-owner isolation, idempotency, the counters, validation, and that no private field leaks                                            |
+| `preview.test.js`         | the excerpt is mono and shorter than the master, served without a token — and the master still needs one                                        |
+| `production.test.js`      | the configuration the box actually runs: `NODE_ENV=production`, the SECRET requirement, and no dev markers in responses                         |
+| `client-store.test.js`    | the browser store: a ★ reaches the right endpoint with the right method, and never blocks the UI                                                |
 | `importer.test.js`        | import pipeline: storage copy, content-hash rename detection, publication rules, idempotency, exports                                           |
 | `render.test.js`          | server-rendered meta tags, structured data, escaping of untrusted metadata                                                                      |
 | `static-build.test.js`    | the static snapshot the domain serves today: pages, playlist, per-track pages                                                                   |
@@ -289,7 +300,7 @@ deploy script that health-checks the result.
 | **M1** ✅ | clickable design prototype + working player over a stub API                                                                                 |
 | **M2** ✅ | SQLite catalogue, private storage (local/S3), real HMAC tokens with a request cap, import pipeline, server-rendered share metadata          |
 | **M3** ✅ | continuous mount: one paced endless stream, ICY metadata, listener counts, play history, `.pls`/`.m3u` station files                        |
-| **M4**    | favourites accounts (magic links), share counters, per-track preview audio                                                                  |
+| **M4** ✅ | ★ favourites server-side with **magic-link accounts** (no passwords), ⇄ share counters, per-track preview excerpts                          |
 | **M5**    | basket checkout (Stripe or external buy links) + watermarked downloads                                                                      |
 | **M6**    | `/admin`: upload, metadata, covers, rotation weights, dashboard                                                                             |
 | **M7** 🟡 | the station on a Node host: `deploy/` is complete and tested; **go-live needs an Oracle account and a DNS change** — see `deploy/README.md` |

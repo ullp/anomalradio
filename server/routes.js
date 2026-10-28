@@ -9,9 +9,36 @@
 import { config } from './config.js';
 import { getStorage } from './storage/index.js';
 import { getTokenService } from './tokens.js';
-import { broadcastState, catalogue, getTrack, listTracks, sanitizeTrack } from './library.js';
+import {
+  broadcastState,
+  catalogue,
+  favouritesFor,
+  getTrack,
+  isStarred,
+  listTracks,
+  recordShare,
+  sanitizeTrack,
+  starTrack,
+  unstarTrack,
+} from './library.js';
+import { normalizeEmail, getAccounts } from './accounts.js';
 import { injectMeta, metaFor, metaForTrack, PAGE_META } from './render.js';
-import { notFound, parseRange, sendJson, sendText, serveStatic } from './http.js';
+import { notFound, parseRange, readJson, sendJson, sendText, serveStatic } from './http.js';
+
+/** ⇪ channels the UI can report. Anything else is counted as `unknown` rather than trusted. */
+const SHARE_CHANNELS = new Set([
+  'x',
+  'facebook',
+  'whatsapp',
+  'telegram',
+  'reddit',
+  'linkedin',
+  'mastodon',
+  'mail',
+  'copy',
+  'native',
+  'qr',
+]);
 
 const AUDIO_HEADERS = {
   'Content-Type': 'audio/mpeg',
@@ -26,6 +53,7 @@ export function createRouter({
   tokens = getTokenService(),
   storage = getStorage(),
   radio = null,
+  accounts = getAccounts(),
 } = {}) {
   const sseClients = new Set();
   let lastTrackId = null;
@@ -152,9 +180,12 @@ export function createRouter({
     if (resource === 'tracks' && param && req.method === 'GET') {
       const track = getTrack(param);
       if (!track) return sendJson(res, 404, { error: 'track-not-found' });
+      // `starred` is per caller — offer §5.2 — so the page renders the right star without a second
+      // request. The owner cookie is not minted here: reading must not have side effects.
+      const { ownerKey } = accounts.ownerFor(req);
       return sendJson(res, 200, {
         dev: !config.isProduction,
-        track: sanitizeTrack(track),
+        track: { ...sanitizeTrack(track), starred: isStarred(ownerKey, track.id) },
         album: catalogue().album,
       });
     }
@@ -243,12 +274,211 @@ export function createRouter({
       });
     }
 
+    /* ── accounts (M4): a sign-in link instead of a password ── */
+
+    // POST /api/auth/magic-link — { email } → e-mail a single-use link
+    if (resource === 'auth' && param === 'magic-link' && req.method === 'POST') {
+      if (security.userAgentBlocked(req)) return sendJson(res, 403, { error: 'blocked-user-agent' });
+      if (security.foreignReferer(req)) return sendJson(res, 403, { error: 'forbidden-origin' });
+      if (security.rateLimited(`magic:${security.ipHash(req)}`, config.accounts.requestRateLimit)) {
+        return sendJson(res, 429, { error: 'rate-limited' });
+      }
+
+      let body;
+      try {
+        body = await readJson(req);
+      } catch (error) {
+        return sendJson(res, 400, { error: error.message });
+      }
+
+      const { ownerKey, setCookie } = accounts.ownerFor(req);
+      const result = await accounts.requestMagicLink({
+        email: body.email,
+        ownerKey,
+        ipHash: security.ipHash(req),
+      });
+      if (!result.ok) {
+        return sendJson(res, result.reason === 'rate-limited' ? 429 : 400, { error: result.reason });
+      }
+
+      // The same answer whether or not the address already has an account: this endpoint must not
+      // be usable to find out who is registered.
+      return sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          sentTo: normalizeEmail(body.email),
+          expiresAt: result.expiresAt,
+          link: result.link, // development only; null in production
+        },
+        setCookie ? { 'Set-Cookie': setCookie } : {},
+      );
+    }
+
+    // GET /api/auth/verify?token=… — the link from the e-mail. Consumes it, sets the session cookie.
+    if (resource === 'auth' && param === 'verify' && req.method === 'GET') {
+      const result = accounts.verifyMagicLink(url.searchParams.get('token'));
+      const location = result.ok
+        ? '/favourites/?signed-in=1'
+        : `/favourites/?sign-in-failed=${encodeURIComponent(result.reason)}`;
+      res.writeHead(302, {
+        Location: location,
+        'Cache-Control': 'no-store',
+        'X-Robots-Tag': 'noindex, nofollow',
+        ...(result.ok ? { 'Set-Cookie': accounts.sessionCookie(result.sessionToken) } : {}),
+      });
+      return res.end();
+    }
+
+    // GET /api/auth/session — is anyone signed in, and as whom?
+    if (resource === 'auth' && param === 'session' && req.method === 'GET') {
+      const user = accounts.sessionUser(req);
+      return sendJson(res, 200, {
+        dev: !config.isProduction,
+        signedIn: Boolean(user),
+        email: user?.email ?? null,
+      });
+    }
+
+    // POST /api/auth/logout
+    if (resource === 'auth' && param === 'logout' && req.method === 'POST') {
+      accounts.signOut(req);
+      return sendJson(res, 200, { ok: true }, { 'Set-Cookie': accounts.clearSessionCookie() });
+    }
+
+    /* ── ★ favourites (M4) — the same endpoints signed out (anonymous cookie) and signed in ── */
+
+    if (resource === 'favourites') {
+      const { ownerKey, user, setCookie } = accounts.ownerFor(req);
+      const cookie = setCookie ? { 'Set-Cookie': setCookie } : {};
+
+      if (!param && req.method === 'GET') {
+        const tracks = favouritesFor(ownerKey);
+        return sendJson(
+          res,
+          200,
+          {
+            dev: !config.isProduction,
+            signedIn: Boolean(user),
+            email: user?.email ?? null,
+            count: tracks.length,
+            tracks,
+          },
+          cookie,
+        );
+      }
+
+      if (!param && req.method === 'POST') {
+        if (security.rateLimited(`write:${security.ipHash(req)}`, config.writeRateLimit)) {
+          return sendJson(res, 429, { error: 'rate-limited' });
+        }
+        let body;
+        try {
+          body = await readJson(req);
+        } catch (error) {
+          return sendJson(res, 400, { error: error.message });
+        }
+        const track = getTrack(body.trackId);
+        if (!track) return sendJson(res, 404, { error: 'track-not-found' });
+        return sendJson(res, 200, { ...starTrack(ownerKey, track.id), trackId: track.id }, cookie);
+      }
+
+      if (param && req.method === 'DELETE') {
+        if (security.rateLimited(`write:${security.ipHash(req)}`, config.writeRateLimit)) {
+          return sendJson(res, 429, { error: 'rate-limited' });
+        }
+        return sendJson(res, 200, { ...unstarTrack(ownerKey, param), trackId: param }, cookie);
+      }
+    }
+
+    // POST /api/tracks/:id/share — ⇪ count. The share itself happens in the browser; this is the tally.
+    if (resource === 'tracks' && param && req.method === 'POST' && url.pathname.endsWith('/share')) {
+      if (security.rateLimited(`share:${security.ipHash(req)}`, config.writeRateLimit)) {
+        return sendJson(res, 429, { error: 'rate-limited' });
+      }
+      let body;
+      try {
+        body = await readJson(req);
+      } catch (error) {
+        return sendJson(res, 400, { error: error.message });
+      }
+      const track = getTrack(param);
+      if (!track) return sendJson(res, 404, { error: 'track-not-found' });
+      const channel = SHARE_CHANNELS.has(String(body.channel ?? '')) ? String(body.channel) : 'unknown';
+      return sendJson(res, 200, { ...recordShare(track.id, channel), trackId: track.id, channel });
+    }
+
+    // GET /api/preview/:id — the public excerpt. No token: see handlePreview for why.
+    if (resource === 'preview' && param && req.method === 'GET') {
+      return handlePreview(req, res, param);
+    }
+
     // GET /api/stream/:id?t=… — audio, behind every gate
     if (resource === 'stream' && param && req.method === 'GET') {
       return handleStream(req, res, url, param);
     }
 
     return sendJson(res, 404, { error: 'unknown-endpoint', path: url.pathname });
+  }
+
+  /**
+   * GET /api/preview/:id — the short excerpt (M4).
+   *
+   * The one audio route with no stream token, and that is a decision rather than an oversight: a
+   * preview exists to be heard by people who have never been to the site — it is what a share card
+   * plays — so a browser-context gate would defeat the point of having one. What protects the music
+   * is that this is not the music: 30 s, 96 kbps mono, faded out, generated separately from the
+   * master. The master keeps every gate; see handleStream above.
+   */
+  async function handlePreview(req, res, trackId) {
+    if (security.userAgentBlocked(req)) return sendJson(res, 403, { error: 'blocked-user-agent' });
+    if (security.rateLimited(`preview:${security.ipHash(req)}`, config.preview.rateLimit)) {
+      return sendJson(res, 429, { error: 'rate-limited' });
+    }
+
+    const track = getTrack(trackId);
+    if (!track?.previewKey) return sendJson(res, 404, { error: 'preview-not-found' });
+
+    const info = await storage.stat(track.previewKey).catch(() => null);
+    if (!info) return sendJson(res, 404, { error: 'preview-not-found' });
+
+    const range = parseRange(req.headers.range, info.size);
+    if (range === 'unsatisfiable') {
+      res.writeHead(416, { 'Content-Range': `bytes */${info.size}` });
+      return res.end();
+    }
+
+    let stream;
+    try {
+      stream = await storage.createReadStream(track.previewKey, range ?? {});
+    } catch (error) {
+      console.error(`✗ preview read failed for ${trackId}: ${error.message}`);
+      return sendJson(res, 503, { error: 'audio-unavailable' });
+    }
+
+    const headers = {
+      'Content-Type': 'audio/mpeg',
+      // Public and small, so it may be cached briefly — but only briefly: the file changes only at
+      // import, and a stale preview after re-importing would be confusing.
+      'Cache-Control': 'public, max-age=300',
+      'Content-Disposition': 'inline',
+      'X-Robots-Tag': 'noindex, nofollow',
+      'Accept-Ranges': 'bytes',
+    };
+
+    if (range) {
+      res.writeHead(206, {
+        ...headers,
+        'Content-Range': `bytes ${range.start}-${range.end}/${info.size}`,
+        'Content-Length': range.end - range.start + 1,
+      });
+    } else {
+      res.writeHead(200, { ...headers, 'Content-Length': info.size });
+    }
+
+    stream.on('error', () => res.destroy());
+    return stream.pipe(res);
   }
 
   async function handleStream(req, res, url, trackId) {

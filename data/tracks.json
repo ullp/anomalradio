@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-28T14:46:22.679Z",
+  "generatedAt": "2026-10-28T21:37:51.621Z",
   "generator": "scripts/import-tracks.js",
   "album": {
     "album": "HundredFortyEight",
@@ -39,10 +39,11 @@
       "published": true,
       "featured": false,
       "weight": 1,
-      "plays": 0,
-      "stars": 0,
+      "plays": 13,
+      "stars": 1,
+      "shares": 0,
       "addedAt": "2026-10-28T14:44:52.170Z",
-      "updatedAt": "2026-10-28T14:46:21.861Z",
+      "updatedAt": "2026-10-28T21:37:48.613Z",
       "sourceFile": "dwp/01-Come.mp3"
     },
     {
@@ -73,10 +74,11 @@
       "published": true,
       "featured": false,
       "weight": 1,
-      "plays": 0,
-      "stars": 0,
+      "plays": 5,
+      "stars": 4,
+      "shares": 2,
       "addedAt": "2026-10-28T14:44:52.321Z",
-      "updatedAt": "2026-10-28T14:46:21.987Z",
+      "updatedAt": "2026-10-28T21:37:49.065Z",
       "sourceFile": "dwp/02-Breach.mp3"
     },
     {
@@ -107,10 +109,11 @@
       "published": true,
       "featured": false,
       "weight": 1,
-      "plays": 0,
+      "plays": 2,
       "stars": 0,
+      "shares": 0,
       "addedAt": "2026-10-28T14:44:52.476Z",
-      "updatedAt": "2026-10-28T14:46:22.101Z",
+      "updatedAt": "2026-10-28T21:37:49.492Z",
       "sourceFile": "dwp/03-Converse-studio.mp3"
     },
     {
@@ -141,10 +144,11 @@
       "published": true,
       "featured": false,
       "weight": 1,
-      "plays": 0,
+      "plays": 12,
       "stars": 0,
+      "shares": 0,
       "addedAt": "2026-10-28T14:44:52.609Z",
-      "updatedAt": "2026-10-28T14:46:22.223Z",
+      "updatedAt": "2026-10-28T21:37:49.921Z",
       "sourceFile": "dwp/04-Keep.mp3"
     },
     {
@@ -175,10 +179,11 @@
       "published": true,
       "featured": false,
       "weight": 1,
-      "plays": 0,
+      "plays": 22,
       "stars": 0,
+      "shares": 0,
       "addedAt": "2026-10-28T14:44:52.793Z",
-      "updatedAt": "2026-10-28T14:46:22.348Z",
+      "updatedAt": "2026-10-28T21:37:50.380Z",
       "sourceFile": "dwp/05-Intaktan.mp3"
     },
     {
@@ -209,10 +214,11 @@
       "published": true,
       "featured": false,
       "weight": 1,
-      "plays": 0,
+      "plays": 3,
       "stars": 0,
+      "shares": 0,
       "addedAt": "2026-10-28T14:44:52.967Z",
-      "updatedAt": "2026-10-28T14:46:22.481Z",
+      "updatedAt": "2026-10-28T21:37:50.824Z",
       "sourceFile": "dwp/06-Skitter.mp3"
     },
     {
@@ -243,10 +249,11 @@
       "published": true,
       "featured": false,
       "weight": 1,
-      "plays": 0,
+      "plays": 3,
       "stars": 0,
+      "shares": 0,
       "addedAt": "2026-10-28T14:44:53.085Z",
-      "updatedAt": "2026-10-28T14:46:22.573Z",
+      "updatedAt": "2026-10-28T21:37:51.218Z",
       "sourceFile": "dwp/07-FlipSide.mp3"
     },
     {
@@ -277,10 +284,11 @@
       "published": true,
       "featured": false,
       "weight": 1,
-      "plays": 0,
+      "plays": 5,
       "stars": 0,
+      "shares": 0,
       "addedAt": "2026-10-28T14:44:53.233Z",
-      "updatedAt": "2026-10-28T14:46:22.678Z",
+      "updatedAt": "2026-10-28T21:37:51.621Z",
       "sourceFile": "dwp/08-DontLookBack-Live.mp3"
     }
   ]

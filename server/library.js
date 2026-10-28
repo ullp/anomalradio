@@ -10,7 +10,7 @@
  * `play_history` rows.
  */
 
-import { all, one, rowToTrack } from './db.js';
+import { all, one, rowToTrack, run } from './db.js';
 import { config } from './config.js';
 
 /**
@@ -20,6 +20,7 @@ import { config } from './config.js';
 const INTERNAL_TRACK_FIELDS = [
   'storageKey',
   'streamKey',
+  'previewKey',
   'sourcePath',
   'sourceFile',
   'originalName',
@@ -164,6 +165,71 @@ export function slotAt(nowMs = Date.now(), { tracks = null, scale = config.timeS
 }
 
 /** The station's on-air position at a given instant. Pure: same input, same output. */
+/* ─────────────────────────── ★ favourites (M4) ─────────────────────────── */
+
+/**
+ * The caller's stars, newest first. Unpublished tracks never appear, exactly as in `listTracks`.
+ * `ownerKey` is either an account id (`usr_…`) or an anonymous cookie key (`own_…`).
+ */
+export function favouritesFor(ownerKey) {
+  return all(
+    `SELECT t.* FROM favourites f
+       JOIN tracks t ON t.id = f.track_id
+      WHERE f.owner_key = ? AND t.published = 1
+      ORDER BY f.created_at DESC`,
+    ownerKey,
+  ).map((row) => sanitizeTrack(rowToTrack(row)));
+}
+
+export function isStarred(ownerKey, trackId) {
+  if (!ownerKey) return false;
+  return Boolean(
+    one('SELECT 1 AS yes FROM favourites WHERE owner_key = ? AND track_id = ?', ownerKey, trackId),
+  );
+}
+
+export const starCount = (trackId) =>
+  one('SELECT stars FROM tracks WHERE id = ?', trackId)?.stars ?? 0;
+
+/** Idempotent: starring twice is not an error and does not double-count. */
+export function starTrack(ownerKey, trackId) {
+  const inserted = run(
+    'INSERT OR IGNORE INTO favourites (owner_key, track_id, created_at) VALUES (?, ?, ?)',
+    ownerKey,
+    trackId,
+    new Date().toISOString(),
+  ).changes;
+  if (inserted > 0) run('UPDATE tracks SET stars = stars + 1 WHERE id = ?', trackId);
+  return { starred: true, stars: starCount(trackId) };
+}
+
+export function unstarTrack(ownerKey, trackId) {
+  const removed = run(
+    'DELETE FROM favourites WHERE owner_key = ? AND track_id = ?',
+    ownerKey,
+    trackId,
+  ).changes;
+  if (removed > 0) run('UPDATE tracks SET stars = MAX(0, stars - 1) WHERE id = ?', trackId);
+  return { starred: false, stars: starCount(trackId) };
+}
+
+/* ─────────────────────────── ⇪ shares (M4) ─────────────────────────── */
+
+/**
+ * Count a share. The number the UI shows is denormalised onto `tracks`; `share_events` keeps the
+ * channel breakdown, so "which button actually gets used" is answerable without a third party.
+ */
+export function recordShare(trackId, channel) {
+  run('UPDATE tracks SET shares = shares + 1 WHERE id = ?', trackId);
+  run(
+    'INSERT INTO share_events (track_id, channel, created_at) VALUES (?, ?, ?)',
+    trackId,
+    channel,
+    new Date().toISOString(),
+  );
+  return { shares: one('SELECT shares FROM tracks WHERE id = ?', trackId)?.shares ?? 0 };
+}
+
 export function broadcastState(nowMs = Date.now()) {
   const slot = slotAt(nowMs);
   if (!slot) return null;

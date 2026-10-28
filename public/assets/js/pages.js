@@ -24,6 +24,7 @@ import { coverNode, waveformStrip } from './cover.js';
 import { initPlayer, tuneIn, playTrack, onPlayer, currentTrack } from './player.js';
 import { mountVisualizer } from './visualizer.js';
 import { bindShareButtons, copyTrackLink, trackUrl } from './share.js';
+import { mountAccountPanel, syncFavourites } from './account.js';
 
 let playlist = [];
 let lastState = null;
@@ -31,6 +32,37 @@ const visualizers = [];
 
 const findTrack = (id) =>
   playlist.find((t) => t.id === id) ?? store.favourites().find((t) => t.id === id) ?? null;
+
+let previewAudio = null;
+
+/**
+ * Play the short public excerpt (M4).
+ *
+ * Deliberately not routed through the player: a preview is a 30-second taste, not a queue, so it
+ * plays on its own and stops. The excerpt is the one audio URL with no token — it exists to be
+ * heard by people who are not on the site yet.
+ */
+function togglePreview(track, button) {
+  if (previewAudio?.dataset.track === track.id && !previewAudio.paused) {
+    previewAudio.pause();
+    button?.classList.remove('is-on');
+    return;
+  }
+  previewAudio?.pause();
+  for (const node of qsa('[data-preview]')) node.classList.remove('is-on');
+
+  previewAudio = new Audio(api.previewUrl(track.id));
+  previewAudio.dataset.track = track.id;
+  previewAudio.volume = store.volume();
+  previewAudio.addEventListener('ended', () => button?.classList.remove('is-on'));
+  previewAudio
+    .play()
+    .then(() => {
+      button?.classList.add('is-on');
+      toast(`Preview — ${track.artist} — ${track.title}`, { iconName: 'play' });
+    })
+    .catch(() => toast('The preview could not be played', { iconName: 'info' }));
+}
 
 /* ─────────────────────────── row factory ─────────────────────────── */
 
@@ -106,6 +138,12 @@ function bindRowActions() {
     if (play) {
       const track = findTrack(play.dataset.play);
       if (track) playTrack(track, { queue: playlist.length ? playlist : [track] });
+      return;
+    }
+    const preview = event.target.closest('[data-preview]');
+    if (preview) {
+      const track = findTrack(preview.dataset.preview);
+      if (track) togglePreview(track, preview);
       return;
     }
     const star = event.target.closest('[data-star]');
@@ -414,6 +452,17 @@ async function renderTrackPage() {
             { class: 'btn', type: 'button', dataset: { share: track.id } },
             h('span', { html: icon('share') }),
             'Share',
+          ),
+          h(
+            'button',
+            { class: 'btn', type: 'button', dataset: { preview: track.id } },
+            h('span', { html: icon('play') }),
+            'Preview 30 s',
+          ),
+          h(
+            'span',
+            { class: 'muted text-sm', dataset: { shareCount: track.id } },
+            track.shares ? `${track.shares} share${track.shares === 1 ? '' : 's'}` : '',
           ),
         ),
         h(
@@ -744,6 +793,11 @@ async function boot() {
   initPlayer({ playlist, staticPreview });
   bindRowActions();
 
+  // ★ favourites live on the station now (M4), keyed to this browser or to the signed-in account.
+  // Sync before the page draws so a star is never wrong on first paint; if it fails, the local
+  // cache simply stays as it was.
+  if (!staticPreview) await syncFavourites();
+
   if (!staticPreview) {
     try {
       lastState = await api.getNowPlaying();
@@ -765,6 +819,7 @@ async function boot() {
       break;
     case 'favourites':
       renderFavourites();
+      await mountAccountPanel();
       break;
     case 'cart':
       renderCart();

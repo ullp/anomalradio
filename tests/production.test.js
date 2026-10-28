@@ -20,7 +20,15 @@ let ctx;
 
 before(async () => {
   // The harness applies `env` after its own defaults, so this really is production mode.
-  ctx = await startTestServer({ env: { NODE_ENV: 'production', SECRET: 'a'.repeat(64) } });
+  // PUBLIC_ORIGIN is required: production refuses to start without an https origin, because a
+  // sign-in link sent over http is a link anyone on the path can steal.
+  ctx = await startTestServer({
+    env: {
+      NODE_ENV: 'production',
+      SECRET: 'a'.repeat(64),
+      PUBLIC_ORIGIN: 'https://anomalradio.com',
+    },
+  });
 });
 
 after(async () => {

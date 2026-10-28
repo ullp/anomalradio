@@ -62,7 +62,10 @@ export async function startTestServer(options = {}) {
   }
 
   const serverModule = await import('../../server/index.js');
-  const server = await serverModule.startServer({ port: 0 });
+  // `overrides` is a passthrough for injected collaborators. Careful: importing any server module
+  // *before* calling this helper freezes `config` on the default paths (the real database), which is
+  // why collaborators should be built here, from `options`, or configured through `env`.
+  const server = await serverModule.startServer({ port: 0, ...(options.overrides ?? {}) });
   const { port } = server.address();
   const baseUrl = `http://127.0.0.1:${port}`;
 
@@ -139,8 +142,12 @@ export function createClient(baseUrl) {
     },
 
     /** Raw response with text, parsed JSON and content type — for leak assertions. */
-    async raw(pathname, { headers = {} } = {}) {
-      const response = await fetch(`${baseUrl}${pathname}`, { headers, redirect: 'manual' });
+    async raw(pathname, { headers = {}, ...rest } = {}) {
+      const response = await fetch(`${baseUrl}${pathname}`, {
+        headers,
+        redirect: 'manual',
+        ...rest,
+      });
       const text = await response.text();
       let body = null;
       try {

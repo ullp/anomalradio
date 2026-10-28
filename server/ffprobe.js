@@ -81,6 +81,46 @@ export async function normaliseToLufs(sourcePath, targetPath, { lufs = -14, true
   return targetPath;
 }
 
+/**
+ * Write a short, deliberately degraded excerpt — the per-track preview (M4).
+ *
+ * This is the one piece of audio that is meant to be *heard by strangers*: it is what a share card
+ * plays, and what tells a visitor whether they want the track. So it is a different artifact from
+ * the master, not a slice of it: 96 kbps mono (about a tenth of the data), a fade at the end so it
+ * is audibly a preview, and never the whole track.
+ */
+export async function makePreview(
+  sourcePath,
+  targetPath,
+  { seconds = 30, bitrate = '96k', channels = 1, startRatio = 0.25, durationMs = null } = {},
+) {
+  const startSeconds = durationMs ? Math.max(0, (durationMs / 1000) * startRatio) : 0;
+  const fade = Math.max(0, seconds - 2);
+
+  await execFileAsync('ffmpeg', [
+    '-v',
+    'error',
+    '-y',
+    // Seek before -i: fast, and accurate enough for a preview.
+    '-ss',
+    startSeconds.toFixed(2),
+    '-i',
+    sourcePath,
+    '-t',
+    String(seconds),
+    '-ac',
+    String(channels),
+    '-c:a',
+    'libmp3lame',
+    '-b:a',
+    bitrate,
+    '-af',
+    `afade=t=out:st=${fade}:d=2`,
+    targetPath,
+  ]);
+  return targetPath;
+}
+
 /** Duration of a file in milliseconds, used to sanity-check what we stored. */
 export async function durationMsOf(file) {
   const { durationMs } = await probe(file);

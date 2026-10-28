@@ -80,6 +80,26 @@ export function sendHtml(res, status, html, extraHeaders = {}) {
 }
 
 /**
+ * Read a small JSON body. A larger one is refused rather than buffered, so an unauthenticated
+ * endpoint cannot be used to make the process hold memory.
+ */
+export async function readJson(req, { limit = 16 * 1024 } = {}) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit) throw new Error('body-too-large');
+    chunks.push(chunk);
+  }
+  if (size === 0) return {};
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  } catch {
+    throw new Error('invalid-json');
+  }
+}
+
+/**
  * Parse a `Range` header.
  * @returns {{ start: number, end: number } | 'unsatisfiable' | null} `null` = no range requested
  */
