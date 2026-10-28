@@ -37,7 +37,10 @@ export function createRouter({
   async function handleMount(req, res, url) {
     if (!radio) return sendJson(res, 503, { error: 'stream-not-configured' });
     if (security.userAgentBlocked(req)) return sendJson(res, 403, { error: 'blocked-user-agent' });
-    if (!security.originAllowed(req)) return sendJson(res, 403, { error: 'forbidden-origin' });
+    // A desktop player sends no Referer at all — that is not a foreign referer, it is just VLC.
+    // The real anti-hotlink gate is `/api/session`, which still requires a browser context, and a
+    // token is bound to the address that requested it, so one cannot be handed on to other people.
+    if (security.foreignReferer(req)) return sendJson(res, 403, { error: 'forbidden-origin' });
     if (security.audioRateLimited(req)) return sendJson(res, 429, { error: 'rate-limited' });
 
     const verdict = tokens.verify({
@@ -57,17 +60,25 @@ export function createRouter({
   }
 
   /**
-   * `.pls` and `.m3u` station files: what you paste into VLC or foobar. The token inside is the
-   * long-lived one, because an external player cannot refresh it mid-session.
+   * `.pls` / `.m3u` station files, for VLC, foobar and friends.
+   *
+   * This is the one place a token is issued without a browser fingerprint, and it has to be: the
+   * player fetches the mount itself, with its own User-Agent and no Referer at all, so a
+   * browser-bound token would make the file useless. What still holds:
+   *   · the User-Agent denylist — these are for players, not for rippers;
+   *   · the IP binding, so a station file copied elsewhere does not work;
+   *   · a foreign referer is still refused, so the station cannot be embedded on someone
+   *     else's page. A *missing* referer is not a foreign one: that is simply a player.
    */
   function handleStationFile(req, res, pathname, origin) {
     if (security.userAgentBlocked(req)) return sendText(res, 403, 'forbidden');
-    if (!security.originAllowed(req)) return sendText(res, 403, 'forbidden');
+    if (security.foreignReferer(req)) return sendText(res, 403, 'forbidden');
+    if (security.sessionRateLimited(req)) return sendText(res, 429, 'too many requests');
 
     const issued = tokens.issue({
       trackId: null,
       ipHash: security.ipHash(req),
-      uaHash: security.uaHash(req),
+      uaHash: '', // no browser binding — see above
       ttlSeconds: config.radioTokenTtlSeconds,
     });
     const url = `${origin}${config.mountPath}?t=${encodeURIComponent(issued.token)}`;

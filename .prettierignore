@@ -9,3 +9,10 @@ _data/music/
 media/
 .gitignore
 .env.example
+
+# Deployment: prettier has no parser for nginx, systemd or shell, and
+# env.production.example has no recognised extension.
+deploy/nginx/
+deploy/systemd/
+deploy/bin/
+deploy/env.production.example

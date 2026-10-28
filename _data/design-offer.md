@@ -554,35 +554,56 @@ bulk-loading 300 tracks is one command rather than 300 clicks.
 
 ---
 
-## 10. Deployment on `81.2.196.19`
+## 10. Deployment — the free host (decided)
 
-### 10.1 Topology
+### 10.1 Where it runs
 
 ```
 Internet
    │
-Cloudflare (free: DNS, DDoS, bot mgmt, WAF, TLS edge)      ← recommended, optional
-   │
-nginx on 81.2.196.19  (TLS via Let's Encrypt)
-   ├── anomalradio.com        → static `public/` + Node API on 127.0.0.1:3000
-   ├── stream.anomalradio.com → Icecast on 127.0.0.1:8000  (mount auth → Node)
-   └── media/anomalradio.*    → (only if bucket is proxied; otherwise not exposed at all)
+nginx on an Oracle Cloud Always Free instance  (TLS via Let's Encrypt)
+   ├── anomalradio.com  → the Node app on 127.0.0.1:3000
+   │                       static site + API + the continuous mount, one origin
+   └── *.anomalradio.com → reserved: beta. for staging, stream. for a second mount
 ```
 
-- **DNS you already have** (`A → 81.2.196.19`, `*.anomalradio.com → CNAME anomalradio.com`) is sufficient — no DNS changes needed
-  to launch. If we put Cloudflare in front, the A record becomes a Cloudflare-proxied record and the origin is locked to Cloudflare IPs.
-- **TLS**: Let's Encrypt via **DNS-01 wildcard** → one certificate for `anomalradio.com` + `*.anomalradio.com`, auto-renewed.
-- **Process management**: systemd units (`anomalradio-web`, `icecast`) or Docker Compose (`app`, `icecast`) — Docker is my
-  preference for Icecast (no distro packaging headaches) with Node either containerised or on systemd.
-- **Node under load**: run 1–2 instances behind nginx; streams are I/O-bound, not CPU-bound; a 2 vCPU / 2 GB VPS handles
-  a few hundred concurrent 128 kbps listeners (≈ 4 Mbps per 100 listeners at 128 kbps — watch the VPS bandwidth allowance).
+The host this offer originally assumed ("the VPS you already pay for") turned out not to exist.
+`81.2.196.19` is Forpsi **shared hosting** — an nginx placeholder, no shell, no long-running
+processes — so it cannot run the station, and GitHub Pages can only serve files.
+
+**Decision: Oracle Cloud Infrastructure, Always Free.** 2 OCPU / 12 GB (Ampere A1, ARM64), 200 GB
+block storage, **10 TB/month outbound**, free for the life of the account. It is the only free tier
+with both an always-on machine and a traffic allowance a radio can live inside: GCP's free 1 GB/month
+is about seven hours of one listener, and everything else is a trial or a container that sleeps when
+nobody is listening. Reasoning, capacity arithmetic and the step-by-step runbook:
+[`../deploy/README.md`](../deploy/README.md).
+
+Two things that go wrong there, both covered in that runbook: Oracle may **reclaim instances it
+considers idle** (7-day window, CPU/network/memory all under 10% — which is exactly a radio's shape;
+mitigation is converting to Pay As You Go, which is exempt and still €0 inside the free limits), and
+Ampere A1 capacity is contended (fallback: the two free x86 micro instances, same 10 TB allowance).
+
+- **DNS**: `anomalradio.com` → the instance's public IP; `*.anomalradio.com` stays a wildcard, so
+  `beta.` and `stream.` remain available. Today the apex points at GitHub Pages, which serves the
+  static snapshot; it moves to the instance when the station goes live.
+- **TLS**: Let's Encrypt via **HTTP-01** with the webroot plugin — no wildcard needed, because only
+  the apex is served. (DNS-01 remains an option if `beta.` ever needs its own certificate.) Two nginx
+  configs on purpose: a bootstrap one that can answer the ACME challenge before any certificate
+  exists, and the TLS one, which cannot load without it.
+- **Process management**: one hardened systemd unit (`ProtectSystem=strict`, `NoNewPrivileges`, an
+  unprivileged user, the code tree read-only, only `/var/lib/anomalradio` writable). No Docker and no
+  Icecast — the mount is Node-native, which removes two moving parts from a 12 GB box (see §11b).
+- **Node under load**: a single instance. Streams are I/O-bound, and the per-IP stream cap and rate
+  limiter live in process memory, so a second instance would double the effective limits (see README
+  "Scaling"). At 320 kbps, ~96 concurrent 24/7 listeners would use the entire 10 TB allowance.
 
 ### 10.2 Operational hygiene
 
-- **Backups**: nightly `sqlite3 .backup` + `tracks.json` export + `rclone` copy to offsite (B2/S3); media backed up weekly;
-  a documented one-command restore, tested once.
-- **Monitoring**: `/healthz`, uptime checks (UptimeRobot/Healthchecks), Icecast listener count on the dashboard, log rotation,
-  alert on error rate spikes or storage thresholds.
+- **Backups**: nightly `sqlite3 .backup` + `tracks.json` export, copied off the box (`rsync` to a bucket or a laptop);
+  media backed up weekly; a documented one-command restore, tested once. This matters more than usual here: the host
+  is free, and a free tier is not an SLA.
+- **Monitoring**: `/healthz` (which reports the real listener count and the on-air track), an external uptime check,
+  `journalctl -u anomalradio` for logs, alerts on error-rate spikes or storage thresholds.
 - **Performance**: HTTP/2 + Brotli, immutable caching for hashed assets, fonts preloaded, images as WebP/AVIF with
   `loading="lazy"`, no third-party scripts on the critical path (no Google Fonts, no analytics bloat).
 - **Privacy**: cookieless analytics (self-hosted Umami/Plausible) or none; only the essential `owner_key` cookie; a plain-language
@@ -595,13 +616,15 @@ nginx on 81.2.196.19  (TLS via Let's Encrypt)
 
 | Item                                        | Cost                     |
 | ------------------------------------------- | ------------------------ |
-| VPS you already pay for (`81.2.196.19`)     | —                        |
-| Cloudflare free tier                        | €0                       |
+| VPS — Oracle Cloud Always Free              | €0                       |
 | Let's Encrypt TLS                           | €0                       |
 | Offsite backup bucket (a few GB)            | < €1                     |
 | Optional: R2/B2 for media (zero/low egress) | €1–5                     |
 | Optional: Stripe fees on sales              | 1.5 % + €0.25 (EU cards) |
-| **Total new spend**                         | **≈ €0–6/month**         |
+| **Total to run the station**                | **€0/month**             |
+
+The €0 is genuine but conditional: it depends on staying inside 10 TB/month of egress and on the
+instance not being reclaimed as idle. Both are quantified in `deploy/README.md`.
 
 ---
 
@@ -689,31 +712,70 @@ remains the documented upgrade if we ever want relaying, multiple mounts or exte
 Verification: 139 tests (14 new for the mount: gating, ICY headers and layout, real-time pacing,
 fan-out, history, station files), plus a manual byte-level check of the ICY blocks.
 
+## 11c. M7 — the free host, and the deploy kit
+
+The host question is answered: **Oracle Cloud Always Free** (§10). What ships in `deploy/`:
+
+| File                                 | What it is                                                                                                                                                                                                      |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deploy/cloud-init.yaml`             | first-boot provisioning: Node 24 (arm64), nginx, certbot, ffmpeg, the repo, a generated `SECRET`, the systemd unit, the bootstrap nginx config — and the host-firewall rules that make the box reachable at all |
+| `deploy/systemd/anomalradio.service` | one hardened unit: unprivileged user, `ProtectSystem=strict`, code tree read-only, only `/var/lib/anomalradio` writable, resource ceiling                                                                       |
+| `deploy/nginx/bootstrap.conf`        | HTTP only, answers the ACME challenge before any certificate exists                                                                                                                                             |
+| `deploy/nginx/anomalradio.conf`      | the TLS config: HSTS, HTTP→HTTPS, and the mount location that must never buffer                                                                                                                                 |
+| `deploy/env.production.example`      | every production knob, with `SECRET` empty — the machine generates it                                                                                                                                           |
+| `deploy/bin/deploy.sh`               | idempotent deploy: pull, install, import, restart, then _prove it_ — health check, journal on failure, and what the domain answers from outside                                                                 |
+
+**Two defects found by writing the runbook.** Both had shipped in M3, and both would have made a
+documented feature fail in production:
+
+1. **IP spoofing.** `X-Forwarded-For` was trusted unconditionally, and nginx's usual
+   `$proxy_add_x_forwarded_for` appends — so a client could choose its own apparent IP and reset the
+   per-IP rate limit, the stream concurrency cap and token/IP binding with a single header. The app now
+   believes the header only from a loopback peer, and the nginx config **overwrites** it with
+   `$remote_addr`. Both halves are pinned by tests, and the app-side half was verified live.
+2. **The station files were decorative.** `/radio.pls` and `/radio.m3u` required a browser context and
+   issued a token bound to the browser's User-Agent, and the mount itself demanded a Referer — so VLC,
+   which sends neither, could not listen at all. A _missing_ referer is now distinguished from a
+   _foreign_ one: a foreign referer is still refused, the User-Agent denylist still applies, and
+   `/api/session` (the real anti-hotlink gate) still requires a browser context.
+
+Verification: 180 tests. Every deploy assertion was additionally checked by **mutation** — the property
+was broken deliberately and the suite confirmed to fail. What is _not_ verified here is the part that
+needs your account: instance creation, the VCN rules, the DNS change, and Let's Encrypt issuance.
+
 ## 12. Decisions I need from you
 
-| #   | Question                                                                                                             | Why it matters          | My recommendation                                      |
-| --- | -------------------------------------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------ |
-| 1   | What exactly is at `81.2.196.19` — VPS with SSH/root + Docker, or shared hosting?                                    | chooses Option A vs B   | Option A if you can SSH in                             |
-| 2   | Media on the VPS disk or in a private bucket (R2/B2/S3)? Roughly how many tracks, and expected concurrent listeners? | sizing, bandwidth, cost | start `local`, keep `s3` ready                         |
-| 3   | Sell music for real (Stripe) or link out to an existing store (Bandcamp)?                                            | M5 scope, VAT, refunds  | external link first, Stripe later                      |
-| 4   | Favourites: anonymous (no login) or accounts with login?                                                             | M4 scope                | anonymous first, magic-link accounts later             |
-| 5   | Autoplay: accept the one-click "TUNE IN" gate, or start muted and auto-unmute on interaction?                        | browser policy, UX      | one-click TUNE IN (SomaFM does the same)               |
-| 6   | One channel, or several channels/genres later (SomaFM has 30+)?                                                      | schedule model, mounts  | build one channel, keep the schema multi-channel-ready |
-| 7   | Stream quality: 128 kbps MP3 only, or also a 64 kbps AAC low-bandwidth mount? Lossless?                              | bandwidth vs. fidelity  | 128k MP3 + optional 64k AAC                            |
-| 8   | UI language: English only, or EN + CZ?                                                                               | copy work               | English first, i18n-ready strings                      |
-| 9   | Do you own the rights to stream **and sell** all tracks (self-released)?                                             | legality of the shop    | confirm before M5                                      |
-| 10  | Who uploads tracks — you via `/admin`, or should I just build the CLI import?                                        | M6 scope                | `/admin` upload + CLI both                             |
-| 11  | Is "hard DRM" expected by any stakeholder?                                                                           | sets expectations       | no DRM; layered protection as in §7                    |
-| 12  | Brand: keep exactly black / white / azure, and is there a tagline to use?                                            | final visual polish     | keep logo palette; tagline optional                    |
+| #   | Question                                                                                                                                                                                                                              | Why it matters          | My recommendation                                      |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------ |
+| 1   | ~~What exactly is at `81.2.196.19` — VPS with SSH/root + Docker, or shared hosting?~~ **Answered:** it is Forpsi shared hosting with no shell, so the station runs on Oracle Cloud Always Free instead (§10). Nothing further needed. | —                       | done — see `deploy/`                                   |
+| 2   | Media on the instance's disk or in a private bucket (R2/B2/S3)? Roughly how many tracks, and expected concurrent listeners? (At 320 kbps, ~96 listeners running 24/7 use the whole free 10 TB egress.)                                | sizing, bandwidth, cost | start `local`, keep `s3` ready                         |
+| 3   | Sell music for real (Stripe) or link out to an existing store (Bandcamp)?                                                                                                                                                             | M5 scope, VAT, refunds  | external link first, Stripe later                      |
+| 4   | Favourites: anonymous (no login) or accounts with login?                                                                                                                                                                              | M4 scope                | anonymous first, magic-link accounts later             |
+| 5   | Autoplay: accept the one-click "TUNE IN" gate, or start muted and auto-unmute on interaction?                                                                                                                                         | browser policy, UX      | one-click TUNE IN (SomaFM does the same)               |
+| 6   | One channel, or several channels/genres later (SomaFM has 30+)?                                                                                                                                                                       | schedule model, mounts  | build one channel, keep the schema multi-channel-ready |
+| 7   | Stream quality: 128 kbps MP3 only, or also a 64 kbps AAC low-bandwidth mount? Lossless?                                                                                                                                               | bandwidth vs. fidelity  | 128k MP3 + optional 64k AAC                            |
+| 8   | UI language: English only, or EN + CZ?                                                                                                                                                                                                | copy work               | English first, i18n-ready strings                      |
+| 9   | Do you own the rights to stream **and sell** all tracks (self-released)?                                                                                                                                                              | legality of the shop    | confirm before M5                                      |
+| 10  | Who uploads tracks — you via `/admin`, or should I just build the CLI import?                                                                                                                                                         | M6 scope                | `/admin` upload + CLI both                             |
+| 11  | Is "hard DRM" expected by any stakeholder?                                                                                                                                                                                            | sets expectations       | no DRM; layered protection as in §7                    |
+| 12  | Brand: keep exactly black / white / azure, and is there a tagline to use?                                                                                                                                                             | final visual polish     | keep logo palette; tagline optional                    |
 
-## 13. What I propose to do next (on your go-ahead)
+## 13. Where this stands
 
-1. **M0 now** — initialise the repo exactly as your brief describes (`git init`, remote `origin → https://github.com/ullp/anomalradio.git`,
-   branch `main`), add README/.gitignore/package.json/env example and the folder skeleton. Nothing audio-related is committed.
-2. **M1 immediately after** — build the clickable visual prototype with the real logo so you can judge the futuristic design in the browser
-   (I can serve it locally on your machine so you see it live, and/or push to `beta.anomalradio.com` once the server access is sorted).
-3. Then we answer decisions #1–#4 above and wire the audio (M2), because those four determine the storage and payment plumbing.
+|           | Status                                                                                                                                                   |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **M0–M3** | done, pushed, CI green: repo and tooling, the design and the player, the SQLite catalogue with private storage and real tokens, and the continuous mount |
+| **M7**    | the deploy kit is complete and tested (`deploy/`); go-live needs an Oracle account, a DNS change and one command                                         |
+| **M4–M6** | not started: favourites accounts, checkout, `/admin`                                                                                                     |
 
-**Nothing in this offer is committed to code yet — say the word and I start with M0 + M1.**
+Next, in order:
+
+1. **Go live.** Create the Oracle instance with `deploy/cloud-init.yaml`, point `anomalradio.com` at it,
+   then run `deploy.sh --tls`. The site and the station then share one origin, and the static snapshot
+   on Pages becomes a staging mirror.
+2. **M4** — favourites accounts (magic links), share counters, per-track preview audio.
+3. **M5 / M6** — checkout and `/admin`, in whichever order you prefer.
+
+Decisions #2 and #3–#12 above are still open, and they only affect M4–M6: nothing blocks going live.
 
 _Prepared as a companion to `_data/zadani.md`. All prices/effort are estimates, not quotes._

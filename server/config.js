@@ -108,6 +108,11 @@ export const config = {
   maxStreamsPerIp: int(process.env.MAX_STREAMS_PER_IP, 3),
   sessionRateLimit: int(process.env.SESSION_RATE_LIMIT, 60),
   audioRateLimit: int(process.env.AUDIO_RATE_LIMIT, 600),
+  /**
+   * Honour X-Forwarded-For — but only from a trusted proxy peer (loopback), because the header
+   * is attacker-controlled. Set to false to ignore it entirely.
+   */
+  trustProxy: bool(process.env.TRUST_PROXY, true),
 
   blockedUserAgents: list(process.env.BLOCKED_USER_AGENTS, [
     'streamripper',

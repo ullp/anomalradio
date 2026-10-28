@@ -1,0 +1,74 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  anomalradio.service — the station, on a box that is free forever.
+#
+#  Install:  cp deploy/systemd/anomalradio.service /etc/systemd/system/
+#            systemctl daemon-reload && systemctl enable --now anomalradio
+#
+#  Paths assume the layout in deploy/README.md:
+#    code   /srv/anomalradio          (read-only to the service)
+#    state  /var/lib/anomalradio      (database + private audio — the only writable path)
+#    config /etc/anomalradio/anomalradio.env   (chmod 600, holds SECRET)
+#
+#  The service is confined with ProtectSystem=strict, so if the app ever tries to
+#  write outside /var/lib/anomalradio it fails loudly instead of quietly filling
+#  the disk or dropping files next to the code.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[Unit]
+Description=Anomalradio.com — continuous stream, catalogue and site
+Documentation=https://github.com/ullp/anomalradio
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=anomalradio
+Group=anomalradio
+WorkingDirectory=/srv/anomalradio
+EnvironmentFile=/etc/anomalradio/anomalradio.env
+ExecStart=/usr/bin/node scripts/serve.js
+
+# A listener holds one long-lived connection, so restarts are visible to the
+# audience: keep them rare, but never leave the station down.
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=20
+KillMode=mixed
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=anomalradio
+
+# ── hardening ──
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+UMask=0027
+# The code tree stays read-only; only the state directory is writable.
+ReadWritePaths=/var/lib/anomalradio
+# If this ever refuses to start with EPERM on the VPS, comment out this one line:
+# Node's syscall usage varies by version and the filter is the usual suspect.
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# ── resource ceiling (the same box also serves the site) ──
+MemoryMax=1G
+TasksMax=256
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target

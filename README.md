@@ -165,27 +165,31 @@ them into SQLite (the `stream_tokens` table already records every issued token) 
 ## Testing
 
 ```bash
-npm test                            # all suites (~25 s, 139 cases)
+npm test                            # all suites (~30 s, 180 cases)
 npm test -- tests/security.test.js  # one file
 ```
 
 The suite is the executable version of the security promises above — if one of these fails, the site is leaking
-something it claims not to leak. It has already caught four real defects, including a storage-path leak waiting to
-happen in M2 and an XSS vector in the server-rendered structured data.
+something it claims not to leak. It has already caught real defects, including a storage-path leak waiting to
+happen in M2, an XSS vector in the server-rendered structured data, an unthrottled mount that behaved like a bulk
+download, and a station file that no player could actually use.
 
-| File                      | What it pins                                                                                                       |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `security.test.js`        | the indirection rule, storage isolation, session and stream gating, response hardening, byte ranges, method safety |
-| `api-contract.test.js`    | response shapes, status codes, MIME types, the SSE feed, `sanitizeTrack`                                           |
-| `broadcast-clock.test.js` | the on-air clock is a pure function of time: gapless history, cyclic rotation, progress                            |
-| `tokens.test.js`          | HMAC signature, expiry, track/IP/browser binding, the request cap, revocation, per-IP stats                        |
-| `importer.test.js`        | import pipeline: storage copy, content-hash rename detection, publication rules, idempotency, exports              |
-| `render.test.js`          | server-rendered meta tags, structured data, escaping of untrusted metadata                                         |
-| `storage.test.js`         | SigV4 against the AWS documentation example and an independent implementation, local driver, key safety            |
-| `limit-streams.test.js`   | the per-IP concurrency cap holds with genuinely parallel connections                                               |
-| `limit-rate.test.js`      | token minting is rate limited                                                                                      |
-| `token-expiry.test.js`    | a token stops working once its TTL passes                                                                          |
-| `library.test.js`         | the real catalogue matches the audio on disk and ids stay stable (skips without `_data/music`)                     |
+| File                      | What it pins                                                                                                                                    |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `security.test.js`        | the indirection rule, storage isolation, session and stream gating, response hardening, byte ranges, method safety                              |
+| `api-contract.test.js`    | response shapes, status codes, MIME types, the SSE feed, `sanitizeTrack`                                                                        |
+| `broadcast-clock.test.js` | the on-air clock is a pure function of time: gapless history, cyclic rotation, progress                                                         |
+| `tokens.test.js`          | HMAC signature, expiry, track/IP/browser binding, the request cap, revocation, per-IP stats                                                     |
+| `radio.test.js`           | the mount: gating, ICY headers, real-time pacing, fan-out, play history, and the browser→player station-file handoff                            |
+| `deploy.test.js`          | the production boundary: X-Forwarded-For is overwritten not appended, the mount is never buffered, the unit is confined, no secret is committed |
+| `importer.test.js`        | import pipeline: storage copy, content-hash rename detection, publication rules, idempotency, exports                                           |
+| `render.test.js`          | server-rendered meta tags, structured data, escaping of untrusted metadata                                                                      |
+| `static-build.test.js`    | the static snapshot the domain serves today: pages, playlist, per-track pages                                                                   |
+| `storage.test.js`         | SigV4 against the AWS documentation example and an independent implementation, local driver, key safety                                         |
+| `limit-streams.test.js`   | the per-IP concurrency cap holds with genuinely parallel connections                                                                            |
+| `limit-rate.test.js`      | token minting is rate limited                                                                                                                   |
+| `token-expiry.test.js`    | a token stops working once its TTL passes                                                                                                       |
+| `library.test.js`         | the real catalogue matches the audio on disk and ids stay stable (skips without `_data/music`)                                                  |
 
 All but the last run against a **committed fixture library** (`tests/fixtures/`: two 800 ms
 generated MP3s plus an index produced by the real scanner), so they are hermetic, fast and
@@ -265,28 +269,43 @@ npm run import -- --publish     # catalogue → private storage + SQLite
 SECRET=$(openssl rand -hex 32) NODE_ENV=production npm start
 ```
 
-and point DNS at that host instead of GitHub Pages (offer §10 covers nginx, TLS and backups).
+and point DNS at that host instead of GitHub Pages.
+
+**Which host, and how much:** the free answer is **Oracle Cloud's Always Free tier** — 2 OCPU /
+12 GB ARM VM, 200 GB disk, **10 TB/month outbound**, permanent. A radio is a bandwidth business, and
+that is the only free tier with an allowance big enough to matter (GCP's free 1 GB/month is about
+seven hours of one listener). The full reasoning, the capacity arithmetic, the two ways it can go
+wrong, and the step-by-step runbook are in **[`deploy/README.md`](deploy/README.md)**.
+
+Everything needed to run it is in [`deploy/`](deploy/): cloud-init provisioning, a hardened systemd
+unit, two nginx configs (bootstrap → TLS), a production environment template, and an idempotent
+deploy script that health-checks the result.
 
 ## Roadmap
 
-| Milestone | Scope                                                                                                                              |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **M0** ✅ | repo, tooling, design tokens, project skeleton                                                                                     |
-| **M1** ✅ | clickable design prototype + working player over a stub API                                                                        |
-| **M2** ✅ | SQLite catalogue, private storage (local/S3), real HMAC tokens with a request cap, import pipeline, server-rendered share metadata |
-| **M3** ✅ | continuous mount: one paced endless stream, ICY metadata, listener counts, play history, `.pls`/`.m3u` station files               |
-| **M4**    | favourites accounts (magic links), share counters, per-track preview audio                                                         |
-| **M5**    | basket checkout (Stripe or external buy links) + watermarked downloads                                                             |
-| **M6**    | `/admin`: upload, metadata, covers, rotation weights, dashboard                                                                    |
-| **M7**    | the station on a Node host: nginx, TLS, backups, monitoring, abuse testing (the current host is shared hosting — see above)        |
+| Milestone | Scope                                                                                                                                       |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **M0** ✅ | repo, tooling, design tokens, project skeleton                                                                                              |
+| **M1** ✅ | clickable design prototype + working player over a stub API                                                                                 |
+| **M2** ✅ | SQLite catalogue, private storage (local/S3), real HMAC tokens with a request cap, import pipeline, server-rendered share metadata          |
+| **M3** ✅ | continuous mount: one paced endless stream, ICY metadata, listener counts, play history, `.pls`/`.m3u` station files                        |
+| **M4**    | favourites accounts (magic links), share counters, per-track preview audio                                                                  |
+| **M5**    | basket checkout (Stripe or external buy links) + watermarked downloads                                                                      |
+| **M6**    | `/admin`: upload, metadata, covers, rotation weights, dashboard                                                                             |
+| **M7** 🟡 | the station on a Node host: `deploy/` is complete and tested; **go-live needs an Oracle account and a DNS change** — see `deploy/README.md` |
 
 Details, effort estimates and open decisions: [`_data/design-offer.md`](_data/design-offer.md).
 
-## Deployment (planned, M7)
+## Deployment
 
-`anomalradio.com` → `81.2.196.19` behind nginx with a Let's Encrypt wildcard certificate (the existing
-`*.anomalradio.com` CNAME already allows `stream.` and `beta.` hosts). The app runs on systemd or Docker Compose with
-Icecast alongside; media lives on a separate volume, with nightly offsite backups.
+**The site** is live at `https://anomalradio.com/` today, served from GitHub Pages as a static
+snapshot (`scripts/build-static.js`), because neither host available so far can run the station:
+GitHub Pages only serves files, and `81.2.196.19` is Forpsi shared hosting with no shell.
+
+**The station** needs a Node process with a writable disk. That is [`deploy/`](deploy/README.md):
+nginx + systemd + Let's Encrypt on an **Oracle Cloud Always Free** instance, with the private audio
+and the SQLite catalogue on the instance's own volume (`/var/lib/anomalradio`), never in a web root.
+Once it is up, DNS moves from Pages to that instance and the snapshot becomes a staging mirror.
 
 ## Licensing
 

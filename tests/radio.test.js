@@ -8,9 +8,11 @@
 
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { startTestServer } from './helpers/server.js';
+import { startTestServer, BROWSER_UA } from './helpers/server.js';
 
 const METAINT = 16384;
+/** What a desktop player sends: its own agent, and no Referer at all. */
+const VLC_UA = 'VLC/3.0.21 LibVLC/3.0.21';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let ctx;
@@ -184,12 +186,49 @@ describe('station files', () => {
     assert.match(text, new RegExp(`${escapeRegExp(radioInfo.mount)}\\?t=`));
   });
 
-  it('keeps the station files behind the same gates', async () => {
-    const response = await client.get('/radio.pls', {
-      headers: { 'user-agent': 'curl/8.7.1', referer: `${client.baseUrl}/player/` },
+  it('can be fetched by a player that sends no Referer at all', async () => {
+    // The whole point of the file: VLC fetches it itself, with its own User-Agent
+    // and no Referer. Requiring a browser context made this impossible.
+    const { response, text } = await client.raw('/radio.pls', { headers: { 'user-agent': VLC_UA } });
+    assert.equal(response.status, 200);
+    assert.match(text, new RegExp(`File1=\\S+${escapeRegExp(radioInfo.mount)}\\?t=`));
+  });
+
+  it('hands out a token a player can actually use', async () => {
+    // The real-world path: the *browser* fetches the file (someone clicks the link in
+    // the console), then VLC opens the stream with its own User-Agent and no Referer.
+    // Binding the token to the browser's User-Agent broke exactly this step.
+    const { text } = await client.raw('/radio.m3u', { headers: client.browserHeaders() });
+    const url = text.split('\n').find((line) => line.startsWith('http'));
+    assert.ok(url, 'the .m3u contains a stream URL');
+
+    const { bytes } = await capture(url.replace(client.baseUrl, ''), {
+      headers: { 'user-agent': VLC_UA }, // deliberately not the agent that fetched the file
+      ms: 1200,
+    });
+    assert.ok(bytes.length > 1000, `the player received ${bytes.length} bytes of audio`);
+  });
+
+  it('still refuses a station-file token from another address', async () => {
+    // The IP binding is what keeps a copied station file from working elsewhere.
+    const { text } = await client.raw('/radio.pls', { headers: { 'user-agent': VLC_UA } });
+    const url = /File1=(\S+)/.exec(text)[1];
+    const response = await client.get(url.replace(client.baseUrl, ''), {
+      headers: { 'user-agent': VLC_UA, 'x-forwarded-for': '203.0.113.9' },
     });
     assert.equal(response.status, 403);
     await response.body?.cancel();
+  });
+
+  it('still refuses a ripper, and a foreign page', async () => {
+    for (const headers of [
+      { 'user-agent': 'streamripper/1.64' }, // a ripper, even with no referer
+      { 'user-agent': BROWSER_UA, referer: 'https://evil.example/' }, // someone else's page
+    ]) {
+      const response = await client.get('/radio.pls', { headers });
+      assert.equal(response.status, 403, JSON.stringify(headers));
+      await response.body?.cancel();
+    }
   });
 });
 

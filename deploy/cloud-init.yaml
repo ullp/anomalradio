@@ -1,0 +1,140 @@
+#cloud-config
+# ─────────────────────────────────────────────────────────────────────────────
+#  Anomalradio.com — first boot on Oracle Cloud Always Free (Ampere A1, ARM64).
+#
+#  Paste into the instance's "Cloud-init script" box when creating it, or attach
+#  as user-data. Target image: Ubuntu 24.04 (aarch64).
+#
+#  It contains no secrets: SECRET is generated on the machine at first boot and
+#  written to /etc/anomalradio/anomalradio.env with mode 0640.
+#
+#  Deliberately NOT done here:
+#    · issuing the TLS certificate — that needs DNS already pointing at this box,
+#      so it is a separate documented step (deploy.sh --tls)
+#    · importing music — the inbox is empty at first boot; deploy.sh handles it
+#
+#  Every runcmd item is a literal block scalar (`- |`). Do not convert them to
+#  flow scalars: YAML folds line breaks inside quotes into spaces, which would
+#  silently collapse a whole shell script into one line.
+# ─────────────────────────────────────────────────────────────────────────────
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - nginx
+  - certbot
+  - python3-certbot-nginx
+  - ffmpeg # provides ffprobe, which the import pipeline needs
+  - git
+  - ca-certificates
+  - curl
+  - openssl
+  - sqlite3 # for the documented `.backup` in deploy/README.md
+  - unattended-upgrades
+  - iptables-persistent # so the firewall change below survives a reboot
+
+users:
+  - name: anomalradio
+    system: true
+    # npm needs a writable HOME; this is also where all state lives.
+    home: /var/lib/anomalradio
+    shell: /usr/sbin/nologin
+    lock_passwd: true
+
+write_files:
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    permissions: '0644'
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+
+  # One-command go-live: obtain the certificate, then install the TLS config.
+  # Requires DNS for anomalradio.com to already point at this instance.
+  - path: /usr/local/bin/anomalradio-cert
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      DOMAIN="anomalradio.com"
+      EMAIL="${CERTBOT_EMAIL:-}"
+      certbot certonly --webroot --webroot-path /var/www/html \
+        --non-interactive --agree-tos --no-eff-email \
+        --cert-name "$DOMAIN" \
+        ${EMAIL:+--email "$EMAIL"} \
+        -d "$DOMAIN" -d "www.$DOMAIN"
+
+runcmd:
+  # ── Node 24 (arm64 build, from the official NodeSource repository) ──
+  - |
+    set -euo pipefail
+    curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+    apt-get install -y nodejs
+    node --version
+  # ── directories ──
+  - |
+    set -euo pipefail
+    install -d -o anomalradio -g anomalradio -m 0750 /var/lib/anomalradio/data /var/lib/anomalradio/media
+    install -d -o anomalradio -g anomalradio -m 0750 /srv/anomalradio-inbox
+    install -d -o root -g anomalradio -m 0750 /etc/anomalradio
+    install -d -m 0755 /var/www/html
+  # ── the code ──
+  - |
+    set -euo pipefail
+    if [ ! -d /srv/anomalradio/.git ]; then
+      git clone --depth 1 https://github.com/ullp/anomalradio.git /srv/anomalradio
+    fi
+    chown -R anomalradio:anomalradio /srv/anomalradio
+    cd /srv/anomalradio
+    runuser -u anomalradio -- env HOME=/var/lib/anomalradio npm ci --omit=dev
+  # ── environment: SECRET generated here, never committed ──
+  - |
+    set -euo pipefail
+    cd /srv/anomalradio
+    ENV_FILE=/etc/anomalradio/anomalradio.env
+    if [ ! -f "$ENV_FILE" ]; then
+      install -m 0640 -o root -g anomalradio deploy/env.production.example "$ENV_FILE"
+      sed -i "s|^SECRET=.*|SECRET=$(openssl rand -hex 32)|" "$ENV_FILE"
+    fi
+  # ── systemd unit ──
+  - |
+    set -euo pipefail
+    cd /srv/anomalradio
+    install -m 0644 deploy/systemd/anomalradio.service /etc/systemd/system/anomalradio.service
+    systemctl daemon-reload
+    systemctl enable anomalradio
+  # ── nginx: bootstrap config until a certificate exists ──
+  - |
+    set -euo pipefail
+    cd /srv/anomalradio
+    install -m 0644 deploy/nginx/bootstrap.conf /etc/nginx/sites-available/anomalradio
+    ln -sf ../sites-available/anomalradio /etc/nginx/sites-enabled/anomalradio
+    rm -f /etc/nginx/sites-enabled/default
+    nginx -t
+    systemctl enable --now nginx
+    systemctl reload nginx
+  # ── start the station and prove it answers ──
+  - |
+    set -euo pipefail
+    systemctl restart anomalradio
+    sleep 3
+    curl -fsS http://127.0.0.1:3000/healthz
+  # ── the Oracle gotcha: open 80/443 in the host firewall ──
+  # Opening them in the VCN security list is not enough. Oracle's Ubuntu images
+  # ship a persisted iptables ruleset whose INPUT chain ends in REJECT, so the
+  # box answers perfectly on localhost and looks dead from the internet. Insert
+  # the ACCEPT rules ahead of that REJECT (position 6 is where Oracle's own
+  # documentation puts them) and persist. `-C` keeps this idempotent.
+  #
+  # Related: outbound port 25 is blocked on every OCI tenancy, so magic-link
+  # email (M4) has to go through an email API rather than SMTP from this box.
+  - |
+    set -euo pipefail
+    for port in 80 443; do
+      iptables -C INPUT -p tcp --dport "$port" -m state --state NEW -j ACCEPT 2>/dev/null ||
+        iptables -I INPUT 6 -p tcp --dport "$port" -m state --state NEW -j ACCEPT
+    done
+    netfilter-persistent save
+    iptables -L INPUT -n --line-numbers | head -12
+
+final_message: 'Anomalradio box ready in $UPTIME seconds. Next: scp music to /srv/anomalradio-inbox, then run deploy.sh.'

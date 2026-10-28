@@ -14,6 +14,9 @@
 import { fingerprint } from './tokens.js';
 import { config } from './config.js';
 
+/** Peers allowed to speak for someone else: nginx on the same machine. */
+const TRUSTED_PROXY_PEERS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
 export function createSecurity(overrides = {}) {
   const settings = {
     blockedUserAgents: config.blockedUserAgents,
@@ -21,18 +24,33 @@ export function createSecurity(overrides = {}) {
     sessionRateLimit: config.sessionRateLimit,
     audioRateLimit: config.audioRateLimit,
     maxStreamsPerIp: config.maxStreamsPerIp,
+    trustProxy: config.trustProxy,
     ...overrides,
   };
 
   const rateBuckets = new Map();
   const activeStreams = new Map();
 
-  /** Real client IP, honouring a proxy's X-Forwarded-For (nginx sits in front in production). */
+  /**
+   * Real client IP.
+   *
+   * X-Forwarded-For is attacker-controlled, so it is only honoured when the
+   * immediate peer is a trusted proxy — nginx, which reaches the app over
+   * loopback. Without that check anything able to reach the port directly could
+   * claim any IP it liked and walk straight around the per-IP rate limit, the
+   * stream concurrency cap and token/IP binding. nginx must also *overwrite* the
+   * header (deploy/nginx/anomalradio.conf does) rather than append to it.
+   */
   function clientIp(req) {
+    const peer = req.socket?.remoteAddress ?? '';
     const forwarded = req.headers['x-forwarded-for'];
-    if (typeof forwarded === 'string' && forwarded.length > 0) return forwarded.split(',')[0].trim();
-    return req.socket.remoteAddress ?? 'unknown';
+    if (settings.trustProxy && TRUSTED_PROXY_PEERS.has(peer) && typeof forwarded === 'string') {
+      const first = forwarded.split(',')[0].trim();
+      if (first) return first;
+    }
+    return peer || 'unknown';
   }
+
 
   const ipHash = (req) => fingerprint(clientIp(req));
   const uaHash = (req) => fingerprint(req.headers['user-agent'] ?? '');
@@ -61,6 +79,18 @@ export function createSecurity(overrides = {}) {
         return false;
       }
     });
+  }
+
+  /**
+   * True only when a Referer/Origin is present *and* is not ours — i.e. someone else's page.
+   *
+   * A *missing* header is not foreign. Desktop players send none at all, and treating that as
+   * hostile is what made the .pls/.m3u station files unusable in VLC.
+   */
+  function foreignReferer(req) {
+    const value = req.headers.origin ?? req.headers.referer;
+    if (!value) return false;
+    return !originAllowed(req);
   }
 
   /** Stream-ripper / bot User-Agent denylist. A missing UA counts as a bot. */
@@ -109,6 +139,7 @@ export function createSecurity(overrides = {}) {
     ipHash,
     uaHash,
     originAllowed,
+    foreignReferer,
     userAgentBlocked,
     rateLimited,
     sessionRateLimited,

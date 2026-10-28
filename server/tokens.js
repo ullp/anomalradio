@@ -43,7 +43,14 @@ export function createTokenService({
 } = {}) {
   const sign = (payload) => createHmac('sha256', secret).update(payload).digest();
 
-  function issue({ trackId = null, ipHash, uaHash, ttlSeconds: ttl = ttlSeconds }) {
+  /**
+   * Mint a token.
+   *
+   * `uaHash: ''` means "not bound to a browser". That is used for the .pls/.m3u station files, where
+   * the browser fetches the file but a desktop player (VLC, foobar) opens the stream with its own
+   * User-Agent. The IP binding still applies, so such a token does not travel to another connection.
+   */
+  function issue({ trackId = null, ipHash, uaHash = '', ttlSeconds: ttl = ttlSeconds }) {
     const issuedAt = now();
     const expiresAt = issuedAt + ttl * 1000;
     const nonce = randomBytes(12).toString('base64url');
@@ -93,7 +100,9 @@ export function createTokenService({
     if (!Number.isFinite(claims.e) || claims.e * 1000 < now()) return { ok: false, reason: FAILURE.EXPIRED };
     if (claims.t && trackId && claims.t !== trackId) return { ok: false, reason: FAILURE.TRACK };
     if (claims.i !== ipHash) return { ok: false, reason: FAILURE.IP };
-    if (claims.u !== uaHash) return { ok: false, reason: FAILURE.UA };
+    // An empty `u` means the token was issued without a browser fingerprint (a player
+    // token from the station files): the IP binding above still holds.
+    if (claims.u && claims.u !== uaHash) return { ok: false, reason: FAILURE.UA };
 
     const record = one(
       'SELECT nonce, expires_at, uses, revoked FROM stream_tokens WHERE nonce = ?',
