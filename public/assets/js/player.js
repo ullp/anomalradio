@@ -110,7 +110,12 @@ export async function tuneIn() {
     mode = 'live';
     store.setMode('live');
     current = radio.now?.track ?? current;
-    liveState = { station: radio.station, now: radio.now, next: radio.next, history: liveState?.history ?? [] };
+    liveState = {
+      station: radio.station,
+      now: radio.now,
+      next: radio.next,
+      history: liveState?.history ?? [],
+    };
 
     audio.src = radio.url;
     attachAudio(audio);

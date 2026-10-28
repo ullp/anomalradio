@@ -152,7 +152,11 @@ export function createRouter({
     if (resource === 'tracks' && param && req.method === 'GET') {
       const track = getTrack(param);
       if (!track) return sendJson(res, 404, { error: 'track-not-found' });
-      return sendJson(res, 200, { dev: !config.isProduction, track: sanitizeTrack(track), album: catalogue().album });
+      return sendJson(res, 200, {
+        dev: !config.isProduction,
+        track: sanitizeTrack(track),
+        album: catalogue().album,
+      });
     }
 
     // GET /api/now-playing

@@ -51,7 +51,6 @@ export function createSecurity(overrides = {}) {
     return peer || 'unknown';
   }
 
-
   const ipHash = (req) => fingerprint(clientIp(req));
   const uaHash = (req) => fingerprint(req.headers['user-agent'] ?? '');
 
