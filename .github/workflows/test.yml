@@ -1,0 +1,30 @@
+name: test
+
+# The security contract in tests/ is only a contract if it is enforced. This runs the
+# suite (and the linter) on every push and pull request.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      # ffmpeg/ffprobe is only needed by tests/library.test.js, which skips itself when the
+      # local music folder is absent — as it is on CI, since audio is never committed.
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test

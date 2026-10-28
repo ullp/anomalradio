@@ -142,6 +142,9 @@ Because the tests are the contract, `scripts/serve.js` exposes a small test surf
 its configuration at import time — environment overrides must be set _before_ importing it, which
 is what `tests/helpers/server.js` does.
 
+CI runs the linter and the suite on every push and pull request (`.github/workflows/test.yml`); on
+CI, `library.test.js` skips itself because audio is never committed.
+
 ## Roadmap
 
 | Milestone | Scope                                                                                |
