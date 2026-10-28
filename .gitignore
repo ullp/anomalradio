@@ -40,3 +40,4 @@ Thumbs.db
 .idea/
 
 tests/tmp/
+_site/

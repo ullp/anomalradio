@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "node scripts/serve.js",
     "start": "node scripts/serve.js",
+    "build:static": "node scripts/build-static.js",
     "import": "node scripts/import-tracks.js",
     "test": "node --test 'tests/**/*.test.js'",
     "lint": "eslint .",

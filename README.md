@@ -199,6 +199,42 @@ is what `tests/helpers/server.js` does.
 CI runs the linter and the suite on every push and pull request (`.github/workflows/test.yml`); on
 CI, `library.test.js` skips itself because audio is never committed.
 
+## Deployment: two hosts, and which one you are looking at
+
+The station is two separable things, and the distinction matters because the domain currently points
+at the first one:
+
+|                 | What it is                                                             | Where it can run                                               |
+| --------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------- |
+| **The site**    | pages, catalogue, per-track pages with share cards, favourites, basket | any file host — GitHub Pages, the shared host at `81.2.196.19` |
+| **The station** | token-gated stream, SQLite catalogue, private audio storage, scheduler | a Node process with a writable disk (a small VPS behind nginx) |
+
+`81.2.196.19` is Forpsi **shared hosting** (nginx placeholder, no shell, no long-running processes),
+so it cannot run the station. Until the Node host exists, the domain serves a **static snapshot**:
+
+```bash
+npm run build:static        # writes _site/ : the site + data/playlist.json + per-track pages
+```
+
+A GitHub Actions workflow (`.github/workflows/pages.yml`) builds that snapshot and publishes it to
+GitHub Pages, so `https://anomalradio.com/` shows the real website — the design, the eight-track
+catalogue, working share cards — instead of the repository README.
+
+**The snapshot is honest about itself.** The client falls back to `/data/playlist.json` when `/api/*`
+is absent, shows a “static preview” banner, labels the hero “catalogue preview” rather than “on air”,
+and answers a play attempt with _“playback needs the station server”_ instead of failing obscurely.
+The same fallback is a useful degraded mode in production if the API is ever down.
+
+To run the real station you need a host with Node 22+; then:
+
+```bash
+git clone … && npm ci
+npm run import -- --publish     # catalogue → private storage + SQLite
+SECRET=$(openssl rand -hex 32) NODE_ENV=production npm start
+```
+
+and point DNS at that host instead of GitHub Pages (offer §10 covers nginx, TLS and backups).
+
 ## Roadmap
 
 | Milestone | Scope                                                                                                                              |

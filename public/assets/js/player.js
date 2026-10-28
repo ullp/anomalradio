@@ -40,6 +40,7 @@ let queue = [];
 let mode = store.mode();
 let liveState = null;
 let bar = null;
+let staticPreview = false;
 
 export const currentTrack = () => current;
 export const isPlaying = () => !audio.paused && !audio.ended;
@@ -93,6 +94,7 @@ async function start(track, { startAtMs = 0, nextMode = mode, autoplay = true } 
 
 /** Join the broadcast where it is right now (mid-track, like real radio). */
 export async function tuneIn() {
+  if (staticPreview) return explainStaticMode();
   try {
     const state = await api.getNowPlaying();
     liveState = state;
@@ -106,11 +108,26 @@ export async function tuneIn() {
 
 /** Play one specific track from the start (library, favourites, permalink). */
 export async function playTrack(track, options = {}) {
+  if (staticPreview) return explainStaticMode();
   const list = options.queue ?? queue;
   queue = list.length ? [...list] : [track];
   const index = queue.findIndex((t) => t.id === track.id);
   if (index > 0) queue = [...queue.slice(index), ...queue.slice(0, index)];
   await start(track, { startAtMs: 0, nextMode: 'ondemand' });
+}
+
+/**
+ * A file-only host has no stream endpoint, so say what is missing instead of failing obscurely.
+ * The catalogue, the pages and the share cards still work.
+ */
+function explainStaticMode() {
+  toast('Playback needs the station server — this host only serves files', {
+    iconName: 'info',
+    actionLabel: 'Why?',
+    onAction: () => window.location.assign('/about/#deployment'),
+    timeout: 8000,
+  });
+  return undefined;
 }
 
 export async function toggle() {
@@ -501,11 +518,18 @@ function updateHeader(state) {
 }
 
 /** Boot the player: mount the bar, subscribe to the live feed, bind input. */
-export function initPlayer({ playlist = [] } = {}) {
+export function initPlayer({ playlist = [], staticPreview: isPreview = false } = {}) {
   queue = playlist;
+  staticPreview = isPreview;
   mountBar();
   bindShortcuts();
   bindGlobalTuneIn();
+
+  if (staticPreview) {
+    // Nothing to follow and nothing to mint: say so in the bar rather than showing a dead control.
+    bar.sub.textContent = 'playback needs the station server';
+    return { audio, tuneIn, playTrack, toggle, next, previous, seekTo, setVolume, setMode };
+  }
 
   // Follow the broadcast in live mode.
   api.subscribeNowPlaying((state, kind) => {

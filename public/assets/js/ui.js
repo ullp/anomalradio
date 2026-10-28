@@ -182,6 +182,30 @@ export async function copyText(text) {
   }
 }
 
+/**
+ * Banner shown when the site is being served from a file-only host (GitHub Pages, the shared host)
+ * instead of the station server. The catalogue and the pages are real; playback is not available.
+ */
+export function staticPreviewBanner() {
+  return h(
+    'div',
+    { class: 'static-notice', role: 'status' },
+    h(
+      'div',
+      { class: 'container row wrap gap-6' },
+      h('span', { class: 'pill pill--warn' }, 'static preview'),
+      h(
+        'span',
+        { class: 'static-notice__text' },
+        'This host can only serve files, so the catalogue, the pages and the share cards are live but ' +
+          'playback is not. Streaming needs the station server — ',
+        h('a', { href: '/about/#deployment', textContent: 'what is deployed where' }),
+        '.',
+      ),
+    ),
+  );
+}
+
 /* ─────────────────────────── page chrome ─────────────────────────── */
 
 const NAV = [

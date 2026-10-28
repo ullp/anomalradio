@@ -8,6 +8,12 @@
   box-sizing: border-box;
 }
 
+/* `hidden` must win over any component that sets `display` (the UA rule loses to author CSS,
+   which is how a "hidden" listener pill kept showing up with an empty value). */
+[hidden] {
+  display: none !important;
+}
+
 * {
   margin: 0;
 }
@@ -385,7 +391,27 @@ p {
   *,
   *::before,
   *::after {
-    /* ── small utilities (kept minimal; used instead of inline style attributes,
+    /* ── static preview notice (file-only hosts) ── */
+.static-notice {
+  background: linear-gradient(90deg, rgba(255, 176, 46, 0.14), transparent 70%);
+  border-bottom: 1px solid rgba(255, 176, 46, 0.28);
+  padding-block: 10px;
+  font-size: 13px;
+}
+.static-notice__text {
+  color: var(--ink-2);
+}
+.static-notice a {
+  color: var(--warn);
+}
+.pill--warn {
+  color: var(--warn);
+  border-color: rgba(255, 176, 46, 0.45);
+  background: rgba(255, 176, 46, 0.12);
+  text-transform: uppercase;
+}
+
+/* ── small utilities (kept minimal; used instead of inline style attributes,
       which the strict CSP would block) ── */
     .flex {
       display: flex;

@@ -128,6 +128,35 @@
         </article>
       </section>
 
+      <section class="panel stack" id="deployment">
+        <h2>Where this runs</h2>
+        <p>
+          The station is two different things, and it is worth being clear about which one you are looking at:
+        </p>
+        <ul class="list-tight">
+          <li>
+            <strong>The site</strong> — pages, catalogue, per-track pages, favourites, basket. Static files.
+            These work anywhere, including the file-only host that currently answers for
+            <code>anomalradio.com</code>.
+          </li>
+          <li>
+            <strong>The station</strong> — the token-gated stream, the database, the private audio storage,
+            the scheduler. This needs a Node process with a writable disk, which a file host cannot provide.
+          </li>
+        </ul>
+        <p id="deployment-state">
+          Right now this domain is served as a static snapshot: the catalogue and the pages are real, and
+          playback is not available yet. When the snapshot is published you will see a “static preview” note
+          at the top of every page.
+        </p>
+        <p class="muted text-sm">
+          The machine in the DNS record (<code>81.2.196.19</code>) is shared hosting — no shell, no
+          long-running processes — so the station needs its own host: a small VPS running Node behind nginx
+          with TLS, as described in the deployment plan. Until then this domain stays an honest preview rather
+          than a player that cannot play.
+        </p>
+      </section>
+
       <section class="panel stack" id="contact">
         <h2>Contact</h2>
         <p>

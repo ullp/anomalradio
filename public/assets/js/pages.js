@@ -18,6 +18,7 @@ import {
   relTime,
   toast,
   renderChrome,
+  staticPreviewBanner,
 } from './ui.js';
 import { coverNode, waveformStrip } from './cover.js';
 import { initPlayer, tuneIn, playTrack, onPlayer, currentTrack } from './player.js';
@@ -201,7 +202,9 @@ function renderHome(data) {
         h(
           'div',
           { class: 'now__meta' },
-          h('span', { class: 'pill pill--live' }, h('span', { class: 'live-dot' }), 'ON AIR'),
+          api.isStatic()
+            ? h('span', { class: 'pill pill--warn' }, 'PREVIEW')
+            : h('span', { class: 'pill pill--live' }, h('span', { class: 'live-dot' }), 'ON AIR'),
           h('span', { class: 'pill', id: 'live-progress' }, '—'),
           h('span', { class: 'pill pill--ghost', id: 'live-cycle' }, '—'),
         ),
@@ -638,7 +641,17 @@ function renderConsole(data) {
     history.replaceChildren(
       ...(entries.length
         ? entries.map((entry, index) => trackRow(entry.track, { index: index + 1, playedAt: entry.playedAt }))
-        : [h('li', { class: 'track-row' }, h('span', { class: 'muted' }, 'loading history…'))]),
+        : [
+            h(
+              'li',
+              { class: 'track-row' },
+              h(
+                'span',
+                { class: 'muted' },
+                api.isStatic() ? 'history needs the station server' : 'loading history…',
+              ),
+            ),
+          ]),
     );
     highlightCurrent();
   };
@@ -714,14 +727,30 @@ async function boot() {
     toast(`Could not load the library: ${error.message}`, { iconName: 'info' });
   }
 
-  initPlayer({ playlist });
+  // A file-only host publishes a snapshot instead of an API: say so plainly, and stop asking for
+  // things that cannot exist there.
+  const staticPreview = api.isStatic();
+  if (staticPreview) {
+    qs('.site-header')?.insertAdjacentElement('afterend', staticPreviewBanner());
+    document.body.dataset.static = 'true';
+    // No broadcast clock here, so the on-air card must not claim to be on air.
+    const label = qs('#now-label');
+    if (label) label.textContent = 'catalogue preview';
+    const cycle = qs('#live-cycle');
+    if (cycle) cycle.textContent = 'static snapshot';
+    qs('#live-footer')?.setAttribute('hidden', '');
+  }
+
+  initPlayer({ playlist, staticPreview });
   bindRowActions();
 
-  try {
-    lastState = await api.getNowPlaying();
-    renderLiveBits(lastState);
-  } catch {
-    /* the feed may not be up yet; the SSE subscription fills it in */
+  if (!staticPreview) {
+    try {
+      lastState = await api.getNowPlaying();
+      renderLiveBits(lastState);
+    } catch {
+      /* the feed may not be up yet; the SSE subscription fills it in */
+    }
   }
 
   switch (page) {
