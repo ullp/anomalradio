@@ -121,20 +121,23 @@ export function catalogue() {
 // Fixed epoch so the on-air position is reproducible across restarts and testable without waiting.
 export const BROADCAST_EPOCH = Date.UTC(2026, 0, 1, 0, 0, 0);
 
-/** The station's on-air position at a given instant. Pure: same input, same output. */
-export function broadcastState(nowMs = Date.now()) {
-  const tracks = rotationTracks();
-  if (tracks.length === 0) return null;
+/**
+ * The rotation, materialised: which track is on air at `nowMs`, how far in, and what follows.
+ * This is the single source of truth shared by `/api/now-playing`, the stream pump and the history
+ * recorder — the schedule is the log, and everything else follows it.
+ */
+export function slotAt(nowMs = Date.now(), { tracks = null, scale = config.timeScale } = {}) {
+  const rotation = tracks ?? rotationTracks();
+  if (rotation.length === 0) return null;
 
-  const cycleMs = tracks.reduce((sum, track) => sum + track.durationMs, 0);
-  const scale = config.timeScale;
+  const cycleMs = rotation.reduce((sum, track) => sum + track.durationMs, 0);
   const elapsed = Math.floor((nowMs - BROADCAST_EPOCH) * scale);
   const cycleIndex = Math.floor(elapsed / cycleMs);
 
   const slots = [];
   for (const cycle of [cycleIndex - 1, cycleIndex, cycleIndex + 1]) {
     let offset = cycle * cycleMs;
-    for (const track of tracks) {
+    for (const track of rotation) {
       slots.push({ track, start: offset, end: offset + track.durationMs });
       offset += track.durationMs;
     }
@@ -144,19 +147,38 @@ export function broadcastState(nowMs = Date.now()) {
   const current = slots[index];
   const next = slots[index + 1];
 
-  const toWallClock = (scaledMs) => new Date(BROADCAST_EPOCH + scaledMs / scale).toISOString();
-  const history = slots
-    .slice(Math.max(0, index - 15), index)
+  return {
+    cycleMs,
+    cycleIndex,
+    positionMs: elapsed % cycleMs,
+    slots,
+    index,
+    track: current.track,
+    startedScaled: current.start,
+    endsScaled: current.end,
+    elapsedMs: elapsed - current.start,
+    remainingMs: current.end - elapsed,
+    next: next ? { track: next.track, startsScaled: next.start } : null,
+    toWallClock: (scaledMs) => new Date(BROADCAST_EPOCH + scaledMs / scale).toISOString(),
+  };
+}
+
+/** The station's on-air position at a given instant. Pure: same input, same output. */
+export function broadcastState(nowMs = Date.now()) {
+  const slot = slotAt(nowMs);
+  if (!slot) return null;
+
+  const history = slot.slots
+    .slice(Math.max(0, slot.index - 15), slot.index)
     .reverse()
-    .map((slot) => ({ track: sanitizeTrack(slot.track), playedAt: toWallClock(slot.start) }));
+    .map((entry) => ({ track: sanitizeTrack(entry.track), playedAt: slot.toWallClock(entry.start) }));
 
-  const elapsedMs = elapsed - current.start;
-  const remainingMs = current.end - elapsed;
-
-  // Deterministic pseudo-random "listeners right now": honest about being simulated until M3.
+  // Deterministic pseudo-random "listeners right now" for the prototype; the real count comes from
+  // the stream pump (server/radio.js) and is merged in by the route layer.
+  const scaled = slot.positionMs + slot.cycleIndex * slot.cycleMs;
   const listeners = Math.max(
     3,
-    Math.round(19 + 11 * Math.sin(elapsed / 900000) + 6 * Math.sin(elapsed / 73000) + (elapsed % 7)),
+    Math.round(19 + 11 * Math.sin(scaled / 900000) + 6 * Math.sin(scaled / 73000) + (scaled % 7)),
   );
 
   return {
@@ -165,21 +187,23 @@ export function broadcastState(nowMs = Date.now()) {
     station: {
       name: 'Anomalradio',
       tagline: 'Own music only. Live from the anomaly.',
-      mount: '/radio-128.mp3',
-      bitrate: 128,
+      mount: config.mountPath,
+      bitrate: config.streamBitrate,
       listeners,
-      onAirSince: toWallClock(current.start),
+      onAirSince: slot.toWallClock(slot.startedScaled),
     },
     now: {
-      track: sanitizeTrack(current.track),
-      startedAt: toWallClock(current.start),
-      elapsedMs,
-      remainingMs,
-      progress: elapsedMs / current.track.durationMs,
+      track: sanitizeTrack(slot.track),
+      startedAt: slot.toWallClock(slot.startedScaled),
+      elapsedMs: slot.elapsedMs,
+      remainingMs: slot.remainingMs,
+      progress: slot.elapsedMs / slot.track.durationMs,
     },
-    next: next ? { track: sanitizeTrack(next.track), startsAt: toWallClock(next.start) } : null,
+    next: slot.next
+      ? { track: sanitizeTrack(slot.next.track), startsAt: slot.toWallClock(slot.next.startsScaled) }
+      : null,
     history,
-    cycle: { index: cycleIndex, totalMs: cycleMs, positionMs: elapsed % cycleMs },
+    cycle: { index: slot.cycleIndex, totalMs: slot.cycleMs, positionMs: slot.positionMs },
   };
 }
 

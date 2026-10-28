@@ -96,9 +96,17 @@
           <div class="panel panel--tight stack">
             <span class="stat__label">stream</span>
             <p class="muted text-xs">
-              Audio is delivered per track through a token-gated endpoint; tokens expire after about two
-              minutes and are bound to your IP and browser. In the next milestone the live mode becomes a
-              single continuous Icecast mount instead of track + offset.
+              Live mode is one continuous mount with ICY metadata, so players show the track and there is no
+              per-track file to save. Tokens are bound to your IP and browser, and they expire — a copied URL
+              is worthless almost immediately.
+            </p>
+            <div class="row wrap gap-6">
+              <a class="btn btn--sm" href="/radio.pls">Listen in VLC (.pls)</a>
+              <a class="btn btn--sm" href="/radio.m3u">foobar / other (.m3u)</a>
+            </div>
+            <p class="muted text-xs">
+              The station files carry a longer-lived token, because an external player cannot refresh it
+              mid-session.
             </p>
           </div>
         </aside>

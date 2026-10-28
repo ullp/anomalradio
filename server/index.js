@@ -14,6 +14,7 @@ import process from 'node:process';
 import { assertUsableConfig, config } from './config.js';
 import { closeDatabase, openDatabase } from './db.js';
 import { broadcastState, sanitizeTrack } from './library.js';
+import { createRadio } from './radio.js';
 import { createRouter } from './routes.js';
 import { createSecurity } from './security.js';
 import { createStorage } from './storage/index.js';
@@ -26,7 +27,9 @@ export function createServer(overrides = {}) {
   const storage = overrides.storage ?? createStorage();
   const tokens = overrides.tokens ?? createTokenService();
   const security = overrides.security ?? createSecurity();
-  const router = createRouter({ security, tokens, storage });
+  // The continuous mount. Started below; it only reads audio once a listener is connected.
+  const radio = overrides.radio ?? createRadio({ storage });
+  const router = createRouter({ security, tokens, storage, radio });
 
   const server = createHttpServer((req, res) => {
     const origin = `http://${req.headers.host ?? `localhost:${config.port}`}`;
@@ -41,10 +44,13 @@ export function createServer(overrides = {}) {
     });
   });
 
-  server.on('close', () => router.close());
+  server.on('close', () => {
+    radio.stop();
+    router.close();
+  });
 
   return Object.assign(server, {
-    anomalradio: { storage, tokens, security, router, database },
+    anomalradio: { storage, tokens, security, router, radio, database },
   });
 }
 
@@ -55,6 +61,7 @@ export async function startServer({ port = config.port, host, ...overrides } = {
     server.once('error', reject);
     server.listen(port, host, resolve);
   });
+  server.anomalradio.radio.start();
   return server;
 }
 
@@ -69,7 +76,7 @@ export function banner(server) {
   const storage = server.anomalradio.storage.describe();
   const lines = [
     '',
-    '  ANOMALRADIO · M2 (private storage + database)',
+    '  ANOMALRADIO · M3 (continuous stream)',
     '  ─────────────────────────────────────────────',
     `  local       http://localhost:${port}/`,
     `  storage     ${storage.driver}${storage.directory ? ` (${path.relative(config.root, storage.directory)})` : ''}`,
@@ -77,11 +84,13 @@ export function banner(server) {
     `  secret      ${config.secretIsGenerated ? 'generated for development' : 'from environment'}`,
     `  tokens      ${config.streamTokenTtlSeconds}s TTL · max ${config.maxRequestsPerToken} requests each`,
     `  clock       ×${config.timeScale}${config.timeScale === 1 ? ' (real time)' : ''}`,
+    `  mount       ${config.mountPath} · ${config.streamBitrate} kbps nominal · ICY every ${config.icyMetaInterval} B`,
+    `  station     /radio.pls and /radio.m3u for VLC/foobar`,
   ];
   if (state) {
     lines.push(`  on air now  ${state.now.track.artist} — ${state.now.track.title}`);
     lines.push(`  next        ${state.next?.track.title ?? '—'}`);
-    lines.push(`  listeners   ${state.station.listeners} (simulated until M3)`);
+    lines.push(`  listeners   ${server.anomalradio.radio.listenerCount()} connected right now`);
   } else {
     lines.push('  ⚠ no published tracks — run `npm run import --publish`');
   }
@@ -90,7 +99,7 @@ export function banner(server) {
 }
 
 /** Test surface: everything the suites reach into. */
-export { config, sanitizeTrack, broadcastState, createSecurity, createTokenService };
+export { config, sanitizeTrack, broadcastState, createSecurity, createTokenService, createRadio };
 export { closeDatabase };
 
 /* ─────────────────────────── CLI entry point ─────────────────────────── */

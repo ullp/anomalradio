@@ -43,9 +43,9 @@ export function createTokenService({
 } = {}) {
   const sign = (payload) => createHmac('sha256', secret).update(payload).digest();
 
-  function issue({ trackId = null, ipHash, uaHash }) {
+  function issue({ trackId = null, ipHash, uaHash, ttlSeconds: ttl = ttlSeconds }) {
     const issuedAt = now();
-    const expiresAt = issuedAt + ttlSeconds * 1000;
+    const expiresAt = issuedAt + ttl * 1000;
     const nonce = randomBytes(12).toString('base64url');
 
     const payload = b64url(
@@ -64,7 +64,7 @@ export function createTokenService({
       new Date(expiresAt).toISOString(),
     );
 
-    return { token, nonce, issuedAt, expiresAt: new Date(expiresAt).toISOString(), ttlSeconds };
+    return { token, nonce, issuedAt, expiresAt: new Date(expiresAt).toISOString(), ttlSeconds: ttl };
   }
 
   /**

@@ -92,17 +92,39 @@ async function start(track, { startAtMs = 0, nextMode = mode, autoplay = true } 
   }
 }
 
-/** Join the broadcast where it is right now (mid-track, like real radio). */
+/**
+ * Tune in to the continuous mount (M3).
+ *
+ * One request, one endless stream: the client never switches sources and never holds a per-track
+ * URL. The schedule feed only updates the metadata (title, elapsed, listeners).
+ */
 export async function tuneIn() {
   if (staticPreview) return explainStaticMode();
   try {
-    const state = await api.getNowPlaying();
-    liveState = state;
-    await start(state.now.track, { startAtMs: state.now.elapsedMs, nextMode: 'live' });
-    emit('state', state);
+    const radio = await api.getRadio();
+    if (!radio?.url) {
+      toast('The station is not streaming right now', { iconName: 'info' });
+      return undefined;
+    }
+
+    mode = 'live';
+    store.setMode('live');
+    current = radio.now?.track ?? current;
+    liveState = { station: radio.station, now: radio.now, next: radio.next, history: liveState?.history ?? [] };
+
+    audio.src = radio.url;
+    attachAudio(audio);
+    resumeAudioContext();
+    await audio.play();
+
+    updateBar();
+    if (current) setMediaSession(current);
+    emit('track', { track: current, mode: 'live', startAtMs: radio.now?.elapsedMs ?? 0 });
     toast('Tuned in · live', { iconName: 'radio' });
+    return undefined;
   } catch (error) {
     toast(`Could not tune in: ${error.message}`, { iconName: 'info' });
+    return undefined;
   }
 }
 
@@ -417,11 +439,16 @@ function updateBar() {
   bar.modePill.hidden = mode !== 'live';
   bar.sub.textContent =
     mode === 'live'
-      ? `${fmtTime(audio.currentTime * 1000)} into the set${liveState ? ` · ${liveState.station.listeners} listening` : ''}`
+      ? `${fmtTime(liveState?.now?.elapsedMs ?? 0)} into the set${
+          liveState?.station ? ` · ${liveState.station.listeners} listening` : ''
+        }`
       : `${current.album ?? 'single'}${current.year ? ` · ${current.year}` : ''} · on demand`;
 
   const durationMs = current.durationMs ?? 0;
-  const elapsedMs = Math.max(0, (audio.currentTime || 0) * 1000);
+  // On the mount, `audio.currentTime` counts from when this listener joined, so the position within
+  // the track comes from the schedule instead.
+  const elapsedMs =
+    mode === 'live' ? (liveState?.now?.elapsedMs ?? 0) : Math.max(0, (audio.currentTime || 0) * 1000);
   const ratio = durationMs > 0 ? Math.min(1, elapsedMs / durationMs) : 0;
   bar.fill.style.width = `${(ratio * 100).toFixed(2)}%`;
   bar.range.value = String(Math.round(ratio * 1000));
@@ -554,6 +581,7 @@ export function initPlayer({ playlist = [], staticPreview: isPreview = false } =
   });
   audio.addEventListener('timeupdate', updateBar);
   audio.addEventListener('ended', () => {
+    // The mount should never end; if it does, reconnect rather than falling through to the queue.
     if (mode === 'live') tuneIn();
     else next();
   });

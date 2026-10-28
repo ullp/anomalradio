@@ -11,7 +11,7 @@ import { getStorage } from './storage/index.js';
 import { getTokenService } from './tokens.js';
 import { broadcastState, catalogue, getTrack, listTracks, sanitizeTrack } from './library.js';
 import { injectMeta, metaFor, metaForTrack, PAGE_META } from './render.js';
-import { notFound, parseRange, sendJson, serveStatic } from './http.js';
+import { notFound, parseRange, sendJson, sendText, serveStatic } from './http.js';
 
 const AUDIO_HEADERS = {
   'Content-Type': 'audio/mpeg',
@@ -21,9 +21,72 @@ const AUDIO_HEADERS = {
   'Accept-Ranges': 'bytes',
 };
 
-export function createRouter({ security, tokens = getTokenService(), storage = getStorage() } = {}) {
+export function createRouter({
+  security,
+  tokens = getTokenService(),
+  storage = getStorage(),
+  radio = null,
+} = {}) {
   const sseClients = new Set();
   let lastTrackId = null;
+
+  /**
+   * The continuous mount (M3). Same gates as a track stream, but the response never ends: the pump
+   * keeps writing whatever the schedule says is on air, so there is no per-track resource to save.
+   */
+  async function handleMount(req, res, url) {
+    if (!radio) return sendJson(res, 503, { error: 'stream-not-configured' });
+    if (security.userAgentBlocked(req)) return sendJson(res, 403, { error: 'blocked-user-agent' });
+    if (!security.originAllowed(req)) return sendJson(res, 403, { error: 'forbidden-origin' });
+    if (security.audioRateLimited(req)) return sendJson(res, 429, { error: 'rate-limited' });
+
+    const verdict = tokens.verify({
+      token: url.searchParams.get('t'),
+      trackId: null,
+      ipHash: security.ipHash(req),
+      uaHash: security.uaHash(req),
+    });
+    if (!verdict.ok) return sendJson(res, 403, { error: 'stream-denied', reason: verdict.reason });
+
+    if (!security.streamSlotAvailable(req)) return sendJson(res, 429, { error: 'too-many-streams' });
+    const release = security.acquireStream(req);
+    res.on('close', release);
+
+    radio.addListener(req, res);
+    return undefined;
+  }
+
+  /**
+   * `.pls` and `.m3u` station files: what you paste into VLC or foobar. The token inside is the
+   * long-lived one, because an external player cannot refresh it mid-session.
+   */
+  function handleStationFile(req, res, pathname, origin) {
+    if (security.userAgentBlocked(req)) return sendText(res, 403, 'forbidden');
+    if (!security.originAllowed(req)) return sendText(res, 403, 'forbidden');
+
+    const issued = tokens.issue({
+      trackId: null,
+      ipHash: security.ipHash(req),
+      uaHash: security.uaHash(req),
+      ttlSeconds: config.radioTokenTtlSeconds,
+    });
+    const url = `${origin}${config.mountPath}?t=${encodeURIComponent(issued.token)}`;
+
+    if (pathname.endsWith('.m3u')) {
+      return sendText(
+        res,
+        200,
+        `#EXTM3U\n#EXTINF:-1,Anomalradio — own music only\n${url}\n`,
+        'audio/x-mpegurl',
+      );
+    }
+    return sendText(
+      res,
+      200,
+      `[playlist]\nnumberofentries=1\nFile1=${url}\nTitle1=Anomalradio — own music only\nLength1=-1\nversion=2\n`,
+      'audio/x-scpls',
+    );
+  }
 
   // Push a state snapshot to connected players every 5 seconds, and immediately on a track change.
   const ticker = setInterval(() => {
@@ -85,6 +148,12 @@ export function createRouter({ security, tokens = getTokenService(), storage = g
     if (resource === 'now-playing' && !param && req.method === 'GET') {
       const state = broadcastState();
       if (!state) return sendJson(res, 503, { error: 'no-tracks-published' });
+      // The real count comes from open mount connections; the schedule's number is the fallback.
+      if (radio) {
+        state.station.listeners = radio.listenerCount();
+        state.station.streaming = true;
+        state.station.pumping = radio.nowPlaying()?.pumping ?? false;
+      }
       return sendJson(res, 200, state);
     }
 
@@ -127,18 +196,35 @@ export function createRouter({ security, tokens = getTokenService(), storage = g
       });
     }
 
-    // GET /api/radio — what "live" mode needs to join the broadcast
+    // GET /api/radio — what live mode needs: the mount and a token for it
     if (resource === 'radio' && req.method === 'GET') {
+      if (security.userAgentBlocked(req)) return sendJson(res, 403, { error: 'blocked-user-agent' });
+      if (!security.originAllowed(req)) return sendJson(res, 403, { error: 'forbidden-origin' });
+
       const state = broadcastState();
       if (!state) return sendJson(res, 503, { error: 'no-tracks-published' });
+
+      // A listener holds one long connection, so the mount token outlives the per-track one. It is
+      // still bound to this IP and browser, and still expires.
+      const issued = tokens.issue({
+        trackId: null,
+        ipHash: security.ipHash(req),
+        uaHash: security.uaHash(req),
+        ttlSeconds: config.radioTokenTtlSeconds,
+      });
+
+      const onAir = radio?.nowPlaying();
       return sendJson(res, 200, {
         dev: true,
-        simulated: true,
-        station: state.station,
+        streaming: Boolean(radio),
+        station: { ...state.station, listeners: radio ? radio.listenerCount() : state.station.listeners },
         now: state.now,
         next: state.next,
-        // M3 replaces this with a single continuous Icecast mount protected by stream_auth.
-        join: { trackId: state.now.track.id, startAtMs: state.now.elapsedMs },
+        mount: config.mountPath,
+        url: `${config.mountPath}?t=${encodeURIComponent(issued.token)}`,
+        bitrate: config.streamBitrate,
+        tokenExpiresAt: issued.expiresAt,
+        pumping: onAir?.pumping ?? false,
       });
     }
 
@@ -256,6 +342,12 @@ export function createRouter({ security, tokens = getTokenService(), storage = g
         listeners: state?.station.listeners ?? 0,
         uptimeSeconds: Math.round(process.uptime()),
       });
+    }
+
+    // The continuous mount lives at the site root, like a real station's stream URL.
+    if (url.pathname === config.mountPath && req.method === 'GET') return handleMount(req, res, url);
+    if ((url.pathname === '/radio.pls' || url.pathname === '/radio.m3u') && req.method === 'GET') {
+      return handleStationFile(req, res, url.pathname, origin);
     }
 
     if (url.pathname.startsWith('/api/')) return handleApi(req, res, url);

@@ -2,10 +2,11 @@
 
 Website and 24/7 radio for **[Anomalradio.com](https://anomalradio.com)** — a station that plays only its own music.
 
-> **Status: M2.** The catalogue lives in SQLite, audio lives in private storage outside the web root (this
+> **Status: M3.** The catalogue lives in SQLite, audio lives in private storage outside the web root (this
 > machine's disk, or any S3-compatible bucket), stream tokens are real HMACs with a request cap, and shared track
-> links unfurl with proper meta tags. Still to come: the continuous Icecast stream (M3), accounts and share
-> previews (M4), the shop (M5), the admin (M6) and go-live (M7) — see
+> links unfurl with proper meta tags, and **live mode is a real continuous stream**: one endless mount with
+> ICY metadata, fanned out to every listener and paced to real time. Still to come: accounts (M4), the shop (M5),
+> the admin (M6) and running it on a Node host (M7) — see
 > [`_data/design-offer.md`](_data/design-offer.md).
 
 ---
@@ -164,7 +165,7 @@ them into SQLite (the `stream_tokens` table already records every issued token) 
 ## Testing
 
 ```bash
-npm test                            # all suites (~8 s, 119 cases)
+npm test                            # all suites (~25 s, 139 cases)
 npm test -- tests/security.test.js  # one file
 ```
 
@@ -198,6 +199,37 @@ is what `tests/helpers/server.js` does.
 
 CI runs the linter and the suite on every push and pull request (`.github/workflows/test.yml`); on
 CI, `library.test.js` skips itself because audio is never committed.
+
+## The station: one continuous stream
+
+Live mode is not "play this track then that one" — it is a single endless response, the way broadcast
+radio actually works:
+
+```
+schedule (library.slotAt) ──▶ pump ──▶ every listener
+                                  ├── ICY metadata every 16 kB: StreamTitle='DWP — Intaktan';
+                                  └── play_history row per track
+```
+
+| Property               | How it behaves                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **One resource**       | `GET /radio-128.mp3?t=…` never ends. There is no per-track URL to save, which is the strongest protection in the whole design.                          |
+| **Paced to real time** | The pump is throttled to the on-air track's own bitrate. Without that it would hand out a whole file at disk speed — a download dressed up as a stream. |
+| **ICY metadata**       | `icy-metaint`, `icy-name`, `icy-br` plus a `StreamTitle` block at _exactly_ every interval, so VLC and foobar show the track. Browsers ignore it.       |
+| **Fan-out**            | One reader, many listeners, all hearing the same position. A listener that stops reading is dropped rather than buffered forever.                       |
+| **Late joiners**       | Start mid-track at the offset the schedule dictates — you cannot "start from the beginning" of a live stream.                                           |
+| **Real counts**        | `/api/now-playing` reports open mount connections, and `/healthz` too.                                                                                  |
+| **History**            | Every track change writes a `play_history` row and increments `plays` — the charts read from that.                                                      |
+| **Same gates**         | The mount is behind the token, referer, User-Agent, rate-limit and concurrency checks as everything else.                                               |
+
+External players get station files, which carry a longer-lived token (an external player cannot refresh
+one mid-session):
+
+- `GET /radio.pls` — VLC, foobar2000, Winamp
+- `GET /radio.m3u` — anything else
+
+Tuning in from the console is the same code path: `GET /api/radio` returns the mount URL with a token,
+and the player simply points `<audio>` at it.
 
 ## Deployment: two hosts, and which one you are looking at
 
@@ -242,11 +274,11 @@ and point DNS at that host instead of GitHub Pages (offer §10 covers nginx, TLS
 | **M0** ✅ | repo, tooling, design tokens, project skeleton                                                                                     |
 | **M1** ✅ | clickable design prototype + working player over a stub API                                                                        |
 | **M2** ✅ | SQLite catalogue, private storage (local/S3), real HMAC tokens with a request cap, import pipeline, server-rendered share metadata |
-| **M3**    | continuous radio: ffmpeg → Icecast mount with `stream_auth` validation, ICY metadata                                               |
-| **M4**    | favourites accounts, per-track OG tags, share previews                                                                             |
+| **M3** ✅ | continuous mount: one paced endless stream, ICY metadata, listener counts, play history, `.pls`/`.m3u` station files               |
+| **M4**    | favourites accounts (magic links), share counters, per-track preview audio                                                         |
 | **M5**    | basket checkout (Stripe or external buy links) + watermarked downloads                                                             |
 | **M6**    | `/admin`: upload, metadata, covers, rotation weights, dashboard                                                                    |
-| **M7**    | deployment on `81.2.196.19`: nginx, TLS, backups, monitoring, abuse testing                                                        |
+| **M7**    | the station on a Node host: nginx, TLS, backups, monitoring, abuse testing (the current host is shared hosting — see above)        |
 
 Details, effort estimates and open decisions: [`_data/design-offer.md`](_data/design-offer.md).
 

@@ -658,6 +658,37 @@ Verification: `npm test` — 119 cases, ~8 s, green locally and in CI. The suite
 during M2, including a storage-path leak that the _next_ schema change would have introduced, an XSS
 vector in the JSON-LD block, and a check-then-act race in the stream cap.
 
+## 11b. M3 — the station, for real
+
+Delivered:
+
+- **One continuous mount** (`GET /radio-128.mp3?t=…`): a single endless response fanned out to every
+  listener from one reader. There is no per-track resource at all, which is the strongest protection
+  in the whole design — you cannot save what you were never sent.
+- **Paced to real time** at the on-air track's own bitrate. This is not cosmetic: an unpaced pump
+  hands out a whole file at disk speed, i.e. a download wearing a stream's clothes. (The first
+  version did exactly that — 9 MB in 8 s — and the fix is now pinned by a test.)
+- **ICY metadata**: `icy-name`, `icy-genre`, `icy-br`, `icy-metaint`, and a `StreamTitle` block at
+  _exactly_ every interval, so VLC/foobar show the track. Two subtleties that only show up in strict
+  players, both fixed and tested: the block must land on the interval boundary (not a chunk boundary),
+  and it must never be written outside the interval — including on a track change.
+- **A real listener count** from open connections, in `/api/now-playing` and `/healthz`.
+- **Play history**: every track change writes `play_history` and increments `tracks.plays`, which is
+  what the charts will read.
+- **Station files** for external players: `/radio.pls` and `/radio.m3u`, carrying a longer-lived
+  token (`RADIO_TOKEN_TTL`, 6 h) because a player cannot refresh one mid-session. It is still bound
+  to IP and browser.
+- The client's live mode is now simply "point `<audio>` at the mount" — no source switching, no
+  per-track tokens, and the schedule feed only updates the metadata.
+
+Deviations from the original plan: **no Icecast and no ffmpeg** in the serving path. A Node pump
+gives the same single endless mount, keeps the deployment a single process with no Docker, and puts
+the stream behind the same token/referer/User-Agent/concurrency gates as everything else. Icecast
+remains the documented upgrade if we ever want relaying, multiple mounts or external source clients.
+
+Verification: 139 tests (14 new for the mount: gating, ICY headers and layout, real-time pacing,
+fan-out, history, station files), plus a manual byte-level check of the ICY blocks.
+
 ## 12. Decisions I need from you
 
 | #   | Question                                                                                                             | Why it matters          | My recommendation                                      |

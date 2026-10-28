@@ -90,6 +90,16 @@ export const config = {
   /** Prototype only: speed of the simulated broadcast clock (1 = real time). */
   timeScale: float(process.env.DEMO_TIME_SCALE, 1) || 1,
 
+  /* ── the continuous stream (M3) ── */
+  mountPath: text(process.env.MOUNT_PATH, '/radio-128.mp3'),
+  streamBitrate: int(process.env.STREAM_BITRATE, 128),
+  /** Bytes of audio between ICY metadata blocks — what makes players show the track title. */
+  icyMetaInterval: int(process.env.ICY_METAINT, 16384),
+  /** A live listener holds one long connection, so its token outlives the per-track one. */
+  radioTokenTtlSeconds: int(process.env.RADIO_TOKEN_TTL, 6 * 3600),
+  /** A listener more than this far behind is dropped rather than buffered forever. */
+  listenerBufferLimitBytes: int(process.env.LISTENER_BUFFER_LIMIT, 1024 * 1024),
+
   secret,
   secretIsGenerated,
   streamTokenTtlSeconds: int(process.env.STREAM_TOKEN_TTL, 120),
