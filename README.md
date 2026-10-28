@@ -112,6 +112,36 @@ curl -s -o /dev/null -w '%{http_code}\n' \
   "http://localhost:3000/_data/music/dwp/01-Come.mp3"         # 404 — audio is not in the web root
 ```
 
+## Testing
+
+```bash
+npm test                            # all suites (~4 s, 78 cases)
+npm test -- tests/security.test.js  # one file
+```
+
+The suite is the executable version of the security promises above — if one of these fails, the
+site is leaking something it claims not to leak.
+
+| File                      | What it pins                                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `security.test.js`        | the indirection rule, storage isolation, session and stream gating, response hardening, byte ranges, method safety |
+| `api-contract.test.js`    | response shapes, status codes, MIME types, the SSE feed, `sanitizeTrack`                                           |
+| `broadcast-clock.test.js` | the on-air clock is a pure function of time: gapless history, cyclic rotation, progress                            |
+| `limit-streams.test.js`   | the per-IP concurrency cap holds with genuinely parallel connections                                               |
+| `limit-rate.test.js`      | token minting is rate limited                                                                                      |
+| `token-expiry.test.js`    | a token stops working once its TTL passes                                                                          |
+| `library.test.js`         | the real catalogue matches the audio on disk and ids stay stable (skips without `_data/music`)                     |
+
+All but the last run against a **committed fixture library** (`tests/fixtures/`: two 800 ms
+generated MP3s plus an index produced by the real scanner), so they are hermetic, fast and
+independent of your private music folder. `library.test.js` is the only suite that touches
+`_data/music`, and it skips itself with a clear message when that folder or ffprobe is missing.
+
+Because the tests are the contract, `scripts/serve.js` exposes a small test surface
+(`createServer`, `startServer({ port: 0 })`, `config`, `sanitizeTrack`, `broadcastState`) and reads
+its configuration at import time — environment overrides must be set _before_ importing it, which
+is what `tests/helpers/server.js` does.
+
 ## Roadmap
 
 | Milestone | Scope                                                                                |

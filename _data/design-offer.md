@@ -620,6 +620,8 @@ nginx on 81.2.196.19  (TLS via Let's Encrypt)
 | **M8 — Extras (optional, on demand)** | Accounts, embed widget, sleep timer, requests/voting, PWA, 64 kbps AAC mount, charts page, analytics, Chromecast                                                               | as agreed                   |
 
 - **Playable + beautiful MVP (M0–M2): ~4 days.** _Full brief (M0–M7): ~8–12 days._
+- The security invariants in §7 are pinned by `npm test` (78 cases, ~4 s) — M2 must keep them green.
+
 - M1 is a **hard approval gate**: you see the design in the browser before any backend work starts.
 - Everything after M2 is independently shippable — you can go live after M3 and add shopping later.
 

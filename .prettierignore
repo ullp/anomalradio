@@ -1,0 +1,10 @@
+# Generated / vendored content that prettier must not touch
+node_modules/
+package-lock.json
+public/assets/fonts/
+public/assets/img/
+tests/fixtures/
+tests/tmp/
+_data/music/
+media/
+.gitignore

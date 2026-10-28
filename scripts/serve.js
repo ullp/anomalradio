@@ -28,7 +28,7 @@
  *   DEMO_TIME_SCALE=0.05 npm run dev   → broadcast clock runs 20× faster (watch track changes)
  */
 
-import { createServer } from 'node:http';
+import { createServer as createHttpServer } from 'node:http';
 import { createHash, randomBytes } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
@@ -129,11 +129,20 @@ const mmss = (ms) => {
 };
 
 /**
- * The indirection rule from the offer (§6.1): internal fields never leave the server.
- * `sourceFile` is the mapping used by this dev server only.
+ * Fields that exist only for the server: the id → file mapping.
+ * These must never be serialised to a client, so they are stripped by name rather than
+ * relying on the current index not having them — M2 adds `storageKey` and would otherwise
+ * start leaking the private path silently.
+ */
+const INTERNAL_TRACK_FIELDS = ['sourceFile', 'storageKey', 'originalName', 'sourcePath', 'localPath'];
+
+/**
+ * The indirection rule from the offer (§6.1): the public world only ever sees ids.
+ * Returns a copy, so the caller's object is never modified.
  */
 function sanitizeTrack(track) {
-  const { sourceFile: _sourceFile, ...publicTrack } = track;
+  const publicTrack = { ...track };
+  for (const field of INTERNAL_TRACK_FIELDS) delete publicTrack[field];
   return publicTrack;
 }
 
@@ -460,6 +469,11 @@ async function handleStream(req, res, url, trackId) {
 
   if (!streamSlotAvailable(req)) return sendJson(res, 429, { error: 'too-many-streams' });
 
+  // Take the slot *before* any await: checking and acquiring separately leaves a window in
+  // which parallel requests can all pass the check and overshoot the per-IP cap.
+  const release = acquireStream(req);
+  res.on('close', release);
+
   const library = await loadLibrary();
   const track = library.tracks.find((t) => t.id === trackId && t.published);
   if (!track) return sendJson(res, 404, { error: 'track-not-found' });
@@ -477,9 +491,6 @@ async function handleStream(req, res, url, trackId) {
   } catch {
     return sendJson(res, 404, { error: 'audio-missing' });
   }
-
-  const release = acquireStream(req);
-  res.on('close', release);
 
   const baseHeaders = {
     'Content-Type': 'audio/mpeg',
@@ -595,7 +606,8 @@ async function serveNotFound(req, res) {
 
 /* ─────────────────────────── request router ─────────────────────────── */
 
-const server = createServer(async (req, res) => {
+/** The whole request pipeline as one handler, so tests can drive it directly. */
+async function handleRequest(req, res) {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
 
   try {
@@ -622,21 +634,34 @@ const server = createServer(async (req, res) => {
     console.error(`✗ ${req.method} ${url.pathname} → ${error.message}`);
     return sendJson(res, 500, { error: 'internal-error' });
   }
-});
+}
 
-await loadLibrary().catch((error) => {
-  console.error(
-    `✗ could not read the library index (${path.relative(ROOT, config.libraryIndex)}): ${error.message}`,
-  );
-  console.error('  Run `npm run import` first — it scans your music folder and writes the index.');
-  process.exit(1);
-});
+/** Create (but do not start) the HTTP server. */
+export function createServer() {
+  return createHttpServer(handleRequest);
+}
 
-server.listen(config.port, () => {
+/**
+ * Load the library and start listening.
+ * `port: 0` asks the operating system for a free port — that is what the tests use,
+ * so several test files can run in parallel without fighting over a port.
+ */
+export async function startServer({ port = config.port, host } = {}) {
+  await loadLibrary();
+  const server = createServer();
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, host, resolve);
+  });
+  return server;
+}
+
+function printBanner(server) {
   const state = broadcastState();
+  const { port } = server.address();
   console.log('\n  ANOMALRADIO · prototype server');
   console.log('  ─────────────────────────────────────────────');
-  console.log(`  local       http://localhost:${config.port}/`);
+  console.log(`  local       http://localhost:${port}/`);
   console.log(
     `  library     ${path.relative(ROOT, config.libraryIndex)} (${libraryCache.data?.trackCount ?? '?'} tracks)`,
   );
@@ -652,11 +677,34 @@ server.listen(config.port, () => {
     console.log(`  listeners   ${state.station.listeners} (simulated)`);
   }
   console.log('');
-});
-
-for (const signal of ['SIGINT', 'SIGTERM']) {
-  process.on(signal, () => {
-    console.log('\n  shutting down prototype server');
-    server.close(() => process.exit(0));
-  });
 }
+
+/* ─────────────────────────── CLI entry point ─────────────────────────── */
+
+const isMain =
+  process.argv[1] !== undefined &&
+  path.resolve(process.argv[1]) === path.join(import.meta.dirname, 'serve.js');
+
+if (isMain) {
+  try {
+    const server = await startServer();
+    printBanner(server);
+
+    for (const signal of ['SIGINT', 'SIGTERM']) {
+      process.on(signal, () => {
+        console.log('\n  shutting down prototype server');
+        server.close(() => process.exit(0));
+      });
+    }
+  } catch (error) {
+    console.error(
+      `✗ could not read the library index (${path.relative(ROOT, config.libraryIndex)}): ${error.message}`,
+    );
+    console.error('  Run `npm run import` first — it scans your music folder and writes the index.');
+    process.exit(1);
+  }
+}
+
+/* ─────────────────────────── test surface ─────────────────────────── */
+
+export { config, sanitizeTrack, broadcastState, loadLibrary };

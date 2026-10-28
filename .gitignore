@@ -9,6 +9,9 @@
 _data/music/
 media/
 _data/_incoming/
+# …except the tiny generated fixtures the hermetic test suite needs
+!tests/fixtures/**/*.mp3
+tests/tmp/
 
 # ── Secrets ──
 .env
@@ -34,3 +37,5 @@ coverage/
 Thumbs.db
 *.swp
 .idea/
+
+tests/tmp/
