@@ -136,17 +136,33 @@ prepare "$ROOT/deploy/nginx/anomalradio.conf" "$WORK/site.conf"
 write_main "$WORK/site.conf" "$WORK/main.conf"
 nginx -T -p "$WORK" -c "$WORK/main.conf" >"$WORK/effective.conf" 2>/dev/null || true
 
+# `nginx -T` dumps the file *with comments*, and our comments name the directive we forbid
+# ("never appended with $proxy_add_x_forwarded_for") — so the checks below run against the
+# dump with comments stripped. Same trap the unit test hit.
+grep -vE '^[[:space:]]*#' "$WORK/effective.conf" >"$WORK/effective-directives.conf"
+
 effective_has() { # <description> <regex>
-  if grep -qE "$2" "$WORK/effective.conf"; then pass "$1"; else fail "$1"; fi
+  if grep -qE "$2" "$WORK/effective-directives.conf"; then pass "$1"; else fail "$1"; fi
 }
 effective_has 'the mount is never buffered' 'proxy_buffering off;'
 effective_has 'the mount is not request-buffered' 'proxy_request_buffering off;'
 effective_has 'X-Forwarded-For is overwritten, not appended' 'proxy_set_header X-Forwarded-For \$remote_addr;'
 effective_has 'a long read timeout for the endless stream' 'proxy_read_timeout 12h;'
-if grep -qE 'proxy_add_x_forwarded_for' "$WORK/effective.conf"; then
+if grep -qE 'proxy_add_x_forwarded_for' "$WORK/effective-directives.conf"; then
   fail 'the effective config appends X-Forwarded-For'
 else
   pass 'the effective config never appends X-Forwarded-For'
+fi
+
+# Prove this harness can actually detect a bad directive, using the exact one that would
+# have broken the target: `http2 on;` needs nginx >= 1.25.1, and Ubuntu 24.04 has 1.24.
+if nginx -v 2>&1 | grep -qE 'nginx/1\.(1[0-9]|2[0-4])\.'; then
+  printf 'events {}\nhttp { server { listen %s; http2 on; } }\n' "$HTTP_PORT" >"$WORK/bad.conf"
+  if nginx -t -p "$WORK" -c "$WORK/bad.conf" >/dev/null 2>&1; then
+    fail 'this harness accepted `http2 on;`, so it cannot detect bad directives'
+  else
+    pass 'the harness rejects `http2 on;` on nginx < 1.25 (the bug it caught)'
+  fi
 fi
 
 # ── 3. live requests through the running proxy ──
