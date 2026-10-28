@@ -34,6 +34,9 @@ let db;
 let storage;
 
 before(async () => {
+  // Nothing to prepare when the suite is going to be skipped (no ffmpeg on this machine/runner).
+  if (skip) return;
+
   scratch = await mkdtemp(path.join(tmpdir(), 'anomalradio-import-'));
   process.env.ANOMALRADIO_DB = path.join(scratch, 'anomalradio.db');
   process.env.MEDIA_DIR = path.join(scratch, 'media');
@@ -72,7 +75,7 @@ before(async () => {
 
 after(async () => {
   db?.closeDatabase();
-  await rm(scratch, { recursive: true, force: true });
+  if (scratch) await rm(scratch, { recursive: true, force: true });
 });
 
 const run = (options = {}) =>

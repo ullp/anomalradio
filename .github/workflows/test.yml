@@ -19,8 +19,12 @@ jobs:
           node-version: '24'
           cache: npm
 
-      # ffmpeg/ffprobe is only needed by tests/library.test.js, which skips itself when the
-      # local music folder is absent — as it is on CI, since audio is never committed.
+      # ffmpeg/ffprobe: needed by the import pipeline suite (tests/importer.test.js) and by
+      # tests/library.test.js. Both skip themselves when it is missing, but installing it means the
+      # pipeline is actually exercised on CI.
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
       - run: npm ci
 
       - name: Lint
