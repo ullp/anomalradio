@@ -625,6 +625,39 @@ nginx on 81.2.196.19  (TLS via Let's Encrypt)
 - M1 is a **hard approval gate**: you see the design in the browser before any backend work starts.
 - Everything after M2 is independently shippable — you can go live after M3 and add shopping later.
 
+## 11a. M2 — what shipped, and where it deviates from this offer
+
+Delivered:
+
+- **Catalogue in SQLite** — `node:sqlite` (Node 22+ built-in), WAL mode, versioned migrations in
+  `server/migrations/`. Tables: `tracks`, `play_history`, `favourites`, `cart_items`, `stream_tokens`,
+  `orders`, `order_items`, `admin_audit`.
+- **Private storage behind a driver interface** — `local` (files outside the web root) and `s3` (any
+  S3-compatible bucket, private, proxy or presigned-redirect). Switching is one environment variable.
+- **Import pipeline** — `npm run import`: hash → ffprobe → id resolution → copy into private storage →
+  database upsert → readable metadata export. Idempotent, rename-aware (content hash), with explicit
+  publication rules so a new file cannot go live by accident. `--normalise` writes an EBU R128 stream
+  master for the radio, leaving the sellable master untouched.
+- **Real tokens** — stateless HMAC bound to track + IP + browser (hashed), 120 s TTL, recorded in the
+  database so it can be revoked and counted.
+- **Server-rendered share metadata** — per-track `og:*`, Twitter card, canonical URL and JSON-LD
+  `MusicRecording`. This was scheduled for M4; it belongs with the database because it needs the track
+  record, and it makes the ⇪ button actually useful.
+
+Deviations, and why:
+
+| Offered                            | Shipped                                                                                                                      | Reason                                                                                                                                     |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Express 5                          | hand-rolled router on `node:http`                                                                                            | the app needs ~10 routes; zero dependencies means no supply chain, no build step, nothing to upgrade                                       |
+| `better-sqlite3`                   | `node:sqlite`                                                                                                                | verified working on Node 24 without flags; no native build. Isolated in `server/db.js` so swapping is a one-file change                    |
+| ffmpeg → Icecast for M3            | planned: a **Node-native continuous mount** (one chunked response with ICY metadata), Icecast kept as the documented upgrade | keeps the single-process, no-Docker deployment the rest of the design assumes; still delivers one endless stream and no per-track resource |
+| single-use nonce                   | nonce recorded once, token reusable up to `MAX_REQUESTS_PER_TOKEN` (400)                                                     | seeking issues many range requests, so a strictly single-use nonce breaks the player; the cap catches rippers instead                      |
+| favourites/cart in the API (M4/M5) | tables exist, API still client-side                                                                                          | deliberately unchanged scope: the browser store works, and the API endpoints land with accounts and checkout                               |
+
+Verification: `npm test` — 119 cases, ~8 s, green locally and in CI. The suite found four real defects
+during M2, including a storage-path leak that the _next_ schema change would have introduced, an XSS
+vector in the JSON-LD block, and a check-then-act race in the stream cap.
+
 ## 12. Decisions I need from you
 
 | #   | Question                                                                                                             | Why it matters          | My recommendation                                      |

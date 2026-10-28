@@ -14,7 +14,7 @@ import { promisify } from 'node:util';
 import { access, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { REAL_INDEX, REAL_SOURCE, ROOT, startTestServer } from './helpers/server.js';
+import { REAL_DB, REAL_INDEX, REAL_MEDIA, REAL_SOURCE, ROOT, startTestServer } from './helpers/server.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -23,8 +23,10 @@ async function unavailableReason() {
   try {
     await access(REAL_INDEX);
     await access(REAL_SOURCE);
+    await access(REAL_DB);
+    await access(REAL_MEDIA);
   } catch {
-    return 'no local music library (_data/music or data/tracks.json missing) — run `npm run import`';
+    return 'no local music library (_data/music, data/tracks.json, data/anomalradio.db or media/ missing) — run `npm run import`';
   }
   try {
     await execFileAsync('ffprobe', ['-version']);
@@ -84,8 +86,13 @@ describe('local catalogue', { skip: skip ?? false }, () => {
     const second = path.join(tempDir, 'scan-2.json');
     const script = path.join(ROOT, 'scripts/import-tracks.js');
 
+    // `--metadata-only`: probe and export, but never touch the real database or media directory.
     for (const out of [first, second]) {
-      await execFileAsync(process.execPath, [script, '--source', REAL_SOURCE, '--out', out], { cwd: ROOT });
+      await execFileAsync(
+        process.execPath,
+        [script, '--source', REAL_SOURCE, '--out', out, '--metadata-only'],
+        { cwd: ROOT },
+      );
     }
 
     const idsFrom = async (file) => (JSON.parse(await readFile(file, 'utf8')).tracks ?? []).map((t) => t.id);
@@ -113,16 +120,30 @@ describe('local catalogue', { skip: skip ?? false }, () => {
     }
   });
 
-  it('serves the real catalogue without leaking storage paths', async () => {
-    const ctx = await startTestServer({ source: REAL_SOURCE, index: REAL_INDEX });
+  it('serves the real catalogue without leaking storage paths', async (t) => {
+    // Uses the real database and media directory directly — no import, so nothing is copied.
+    const ctx = await startTestServer({ dbPath: REAL_DB, mediaDir: REAL_MEDIA });
     try {
       const { tracks } = await (await ctx.client.get('/api/playlist')).json();
+      if (tracks.length === 0) {
+        t.skip('the real catalogue has no published tracks — run `npm run import --publish`');
+        return;
+      }
+
       assert.equal(tracks.length, library.trackCount);
       const serialised = JSON.stringify(tracks);
       assert.ok(!serialised.includes('sourceFile'));
       assert.ok(!serialised.includes('.mp3'));
       assert.ok(!serialised.includes('_data/'));
       for (const track of tracks) assert.ok(!JSON.stringify(track).includes('/'));
+
+      // And the audio itself is served from private storage, not from the import folder.
+      const { token } = await ctx.client.session({ trackId: tracks[0].id });
+      const response = await ctx.client.stream(tracks[0].id, { token, range: 'bytes=0-15' });
+      assert.equal(response.status, 206);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      const stored = await ctx.readStoredFile(tracks[0]);
+      assert.ok(bytes.equals(stored.subarray(0, 16)), 'delivered bytes come from the stored master');
     } finally {
       await ctx.close();
     }

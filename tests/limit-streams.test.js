@@ -72,7 +72,7 @@ async function createLargeFixture() {
     )}\n`,
   );
 
-  return { source: TMP_DIR, index };
+  return { dir: TMP_DIR, index };
 }
 
 let ctx;
@@ -82,7 +82,12 @@ let token;
 
 before(async () => {
   const fixture = await createLargeFixture();
-  ctx = await startTestServer({ ...fixture, env: { MAX_STREAMS_PER_IP: CAP } });
+  // Seeded mode: the fixture index describes the big file, so no ffprobe is involved.
+  ctx = await startTestServer({
+    source: fixture.dir,
+    indexPath: fixture.index,
+    env: { MAX_STREAMS_PER_IP: CAP },
+  });
   client = ctx.client;
   track = ctx.library.tracks[0];
   ({ token } = await client.session({ trackId: track.id }));

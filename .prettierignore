@@ -8,3 +8,4 @@ tests/tmp/
 _data/music/
 media/
 .gitignore
+.env.example

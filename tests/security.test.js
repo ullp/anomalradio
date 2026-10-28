@@ -204,7 +204,7 @@ describe('stream gating — every gate fails closed', () => {
     const response = await client.stream(ctx.track.id, { token });
     assert.equal(response.status, 200);
     const bytes = Buffer.from(await response.arrayBuffer());
-    const expected = await ctx.readSourceFile(ctx.track);
+    const expected = await ctx.readStoredFile(ctx.track);
     assert.equal(bytes.length, expected.length, 'the full file is delivered');
     assert.ok(bytes.equals(expected), 'delivered bytes match the stored master');
   });
@@ -243,7 +243,7 @@ describe('response hardening', () => {
 describe('range requests — needed for seeking, still token-gated', () => {
   it('answers a byte range with 206 and the exact slice', async () => {
     const { token } = await client.session({ trackId: ctx.track.id });
-    const source = await ctx.readSourceFile(ctx.track);
+    const source = await ctx.readStoredFile(ctx.track);
     const response = await client.stream(ctx.track.id, { token, range: 'bytes=100-199' });
     assert.equal(response.status, 206);
     assert.equal(response.headers.get('content-range'), `bytes 100-199/${source.length}`);
@@ -254,7 +254,7 @@ describe('range requests — needed for seeking, still token-gated', () => {
 
   it('rejects an unsatisfiable range with 416', async () => {
     const { token } = await client.session({ trackId: ctx.track.id });
-    const source = await ctx.readSourceFile(ctx.track);
+    const source = await ctx.readStoredFile(ctx.track);
     const response = await client.stream(ctx.track.id, { token, range: `bytes=${source.length + 10}-` });
     assert.equal(response.status, 416);
     await response.body?.cancel();
