@@ -59,7 +59,7 @@ public/                    the website — the only thing a web server should ev
   assets/css/              tokens · base · components · player
   assets/js/               api · store · ui · cover · visualizer · player · share · pages
   assets/fonts/            Orbitron, Inter, JetBrains Mono (SIL OFL 1.1, self-hosted)
-  assets/img/              logo lockup + waveform mark + favicons + social card
+  assets/img/              logo lockup + signal mark + favicons + social card
 scripts/serve.js           zero-dependency prototype server (static + stub API + dev audio)
 scripts/import-tracks.js   library scanner → data/tracks.json
 scripts/fetch-fonts.js     one-off self-hosted font fetch

@@ -205,7 +205,7 @@ export function renderChrome({ active = '' } = {}) {
           class: 'brand__mark',
           src: '/assets/img/logo-mark.png',
           alt: 'Anomalradio',
-          width: '140',
+          width: '42',
           height: '26',
         }),
         h('span', { class: 'brand__name' }, 'anomalradio', h('span', {}, '.com')),

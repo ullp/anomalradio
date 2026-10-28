@@ -2,7 +2,7 @@
    ANOMALRADIO · visualizer.js — Web Audio analysis of the live audio element.
    Two render modes, both driven by real audio data (never fake noise):
      'bars' → spectrum bars, mirrored, accent gradient
-     'ecg'  → oscilloscope trace with a heartbeat pulse on the bass
+     'signal' → oscilloscope trace of the broadcast signal (idle = wave packet)
    Falls back to a calm idle animation when nothing plays or when the
    AudioContext is unavailable.
    ═══════════════════════════════════════════════════════════════════════ */
@@ -43,7 +43,7 @@ export function resumeAudioContext() {
 /**
  * Mount a visualizer on a canvas. Returns a stop() function.
  * @param {HTMLCanvasElement} canvas
- * @param {'bars'|'ecg'} mode
+ * @param {'bars'|'signal'} mode
  */
 export function mountVisualizer(canvas, mode = 'bars') {
   const ctx = canvas.getContext('2d');
@@ -100,7 +100,7 @@ export function mountVisualizer(canvas, mode = 'bars') {
     if (width <= 0 || height <= 0) return;
     const energy = measureEnergy();
     if (mode === 'bars') drawBars(width, height, energy);
-    else drawEcg(width, height, energy);
+    else drawSignal(width, height, energy);
   }
 
   function drawBars(width, height, energy) {
@@ -155,7 +155,7 @@ export function mountVisualizer(canvas, mode = 'bars') {
     }
   }
 
-  function drawEcg(width, height, energy) {
+  function drawSignal(width, height, energy) {
     ctx.clearRect(0, 0, width, height);
     const mid = height / 2;
 
@@ -182,11 +182,11 @@ export function mountVisualizer(canvas, mode = 'bars') {
         const index = Math.floor((i / points) * (timeData.length * 0.5));
         amplitude = ((timeData[index] - 128) / 128) * height * 0.42;
       } else {
-        // idle heartbeat travelling left → right
+        // Idle: a damped wave packet travelling left → right, echoing the
+        // broadcast waves in the logo mark.
         const t = ((i / points) * 3 + phase / 120) % 1;
-        const spike =
-          Math.exp(-((t - 0.5) ** 2) / 0.0007) * 0.55 + Math.exp(-((t - 0.62) ** 2) / 0.004) * 0.18;
-        amplitude = (spike - 0.07) * height * 0.7;
+        const envelope = Math.exp(-((t - 0.5) ** 2) / 0.004);
+        amplitude = envelope * Math.sin(t * 90) * height * 0.55;
       }
       const y = mid - amplitude;
       if (i === 0) ctx.moveTo(x, y);

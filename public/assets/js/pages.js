@@ -156,7 +156,7 @@ function renderLiveBits(state) {
 
 function renderHome(data) {
   const heroCanvas = qs('#hero-viz');
-  if (heroCanvas) visualizers.push(mountVisualizer(heroCanvas, 'ecg'));
+  if (heroCanvas) visualizers.push(mountVisualizer(heroCanvas, 'signal'));
 
   const stats = qs('#hero-stats');
   if (stats) {

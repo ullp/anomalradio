@@ -15,7 +15,7 @@
 | **Stack (proposed)** | Node.js 24 + Express 5 API + vanilla ES-module frontend (no build step), SQLite, ffmpeg + Icecast for the live stream                         |
 | **Media**            | MP3s **outside the web root** (or private object storage), addressed only by opaque IDs, streamed through a token-gated endpoint / live mount |
 | **Protection**       | 5 layers (storage isolation → short-lived IP/UA-bound tokens → anti-bot → continuous stream → client deterrents) + honest limits stated       |
-| **Look**             | Black canvas, azure glow, glass panels, ECG waveform visualizer derived from the logo                                                         |
+| **Look**             | Black canvas, azure glow, glass panels, broadcast-signal visualizer derived from the logo mark                                                |
 | **Effort**           | M0–M7 core ≈ 8–12 working days; **playable + beautiful MVP ≈ 4 days (M0–M2)**                                                                 |
 | **Deploy**           | `81.2.196.19` behind nginx, TLS via Let's Encrypt (wildcard via DNS-01), systemd or Docker Compose                                            |
 
@@ -35,11 +35,12 @@ From `_data/zadani.md`:
 - Protection: playable by people, not downloadable / not "dropped" by hackers.
 - Business: auto radio player, with per-track **star / basket / share**.
 
-From `_data/logo/anomalradiocom-logo.jpeg` (1254×1254 JPEG) — I read the image:
+From `_data/logo/anomalradiocomlogoweb.jpeg` (1254×1254 JPEG, the web lockup) — I read the image:
 
 - Pure **black** background.
 - **White** wide/square techno wordmark "ANOMAL RADIO" (two lines, custom geometric letterforms).
-- **Azure blue** ".COM" (third line) and a blue **ECG / heartbeat waveform** underneath.
+- **Azure blue** broadcast waves flanking a white "A" chevron that holds an azure dot (the mark).
+- Below the mark, the lowercase **"anomalradio.com"** wordmark: white for "anomalradio", azure for ".com".
 - Sampled palette → `#000000` / `#FFFFFF` / `#1B8EF5` (blue, ±few units; final value to be sampled exactly).
 
 From the SomaFM reference (fetched live):
@@ -59,7 +60,7 @@ Environment verified on your machine: **Node v24.3.0**, npm 11.4.2, Python 3.14.
 
 ### 2.1 Design principles
 
-1. **Logo-first**: the wordmark is the hero; the ECG line is the recurring brand motif (idle = flat line, playing = pulsing).
+1. **Logo-first**: the mark is the hero; the broadcast waves are the recurring brand motif (idle = a travelling wave packet, playing = the live signal).
 2. **Dark, precise, technical** — black canvas + a single azure accent, thin 1px borders, no drop-shadow soup.
 3. **One accent colour** used for: play state, active nav, live dot, focus rings, waveform. Everything else is greyscale.
 4. **Motion with meaning**: 120–200 ms transitions; the visualizer is the only continuously animated element (and it is disabled under `prefers-reduced-motion`).
@@ -82,7 +83,7 @@ Environment verified on your machine: **Node v24.3.0**, npm 11.4.2, Python 3.14.
   --ink-3: #7b8595;
 
   /* brand */
-  --accent: #1b8ef5; /* sampled from ".COM" + waveform */
+  --accent: #1b8ef5; /* sampled from the waves, the dot and ".com" */
   --accent-2: #00e5ff; /* cyan end of gradient, for glow only */
   --accent-glow: 0 0 24px rgba(27, 142, 245, 0.45);
   --live: #ff2e4c; /* LIVE dot, mirrors broadcast convention */
@@ -106,18 +107,18 @@ _The wordmark itself stays a raster/SVG asset from `_data/logo/`; Orbitron is on
 
 ### 2.3 Visual language
 
-| Element               | Treatment                                                                                                             |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Hero                  | Full-bleed black, faint 40px grid + radial azure vignette, logo lockup, animated ECG line under it, one primary CTA   |
-| Panels                | `--panel` + `backdrop-filter: blur(14px)`, 1px `--line`, `--r-lg`; hover lifts to `--panel-hi`                        |
-| Now-playing module    | Rotating disc/ring with cover art, title/artist in display font, live elapsed counter in mono, animated spectrum bars |
-| Visualizer            | Web Audio `AnalyserNode` → 48 bars + mirrored ECG trace; canvas, DPR-aware; idle = flatline                           |
-| Buttons               | Pill primary (accent fill, black text), ghost secondary (1px border), icon-only circles for star/basket/share         |
-| Star / basket / share | Same icon slot everywhere (player bar, track rows, track page) — accent fill when active (starred / in cart)          |
-| Track rows            | Index · cover thumb · title/artist · genre pill · duration (mono) · actions; zebra-free, separated by `--line`        |
-| Live indicator        | `--live` pulsing dot + "LIVE" + listener count                                                                        |
-| Grain/scanline        | 2% opacity noise PNG + slow 8s horizontal scan sweep, both disabled for reduced-motion                                |
-| Empty/loading states  | Skeleton shimmer in accent at 8% opacity, never a blank screen                                                        |
+| Element               | Treatment                                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Hero                  | Full-bleed black, faint 40px grid + radial azure vignette, logo lockup, animated signal trace beside it, one primary CTA |
+| Panels                | `--panel` + `backdrop-filter: blur(14px)`, 1px `--line`, `--r-lg`; hover lifts to `--panel-hi`                           |
+| Now-playing module    | Rotating disc/ring with cover art, title/artist in display font, live elapsed counter in mono, animated spectrum bars    |
+| Visualizer            | Web Audio `AnalyserNode` → 48 spectrum bars plus a signal trace; canvas, DPR-aware; idle = travelling wave packet        |
+| Buttons               | Pill primary (accent fill, black text), ghost secondary (1px border), icon-only circles for star/basket/share            |
+| Star / basket / share | Same icon slot everywhere (player bar, track rows, track page) — accent fill when active (starred / in cart)             |
+| Track rows            | Index · cover thumb · title/artist · genre pill · duration (mono) · actions; zebra-free, separated by `--line`           |
+| Live indicator        | `--live` pulsing dot + "LIVE" + listener count                                                                           |
+| Grain/scanline        | 2% opacity noise PNG + slow 8s horizontal scan sweep, both disabled for reduced-motion                                   |
+| Empty/loading states  | Skeleton shimmer in accent at 8% opacity, never a blank screen                                                           |
 
 ### 2.4 Pages (site map)
 
@@ -246,7 +247,7 @@ anomalradio/
 ├── _data/                        # SOURCE material, never published
 │   ├── zadani.md                 # your brief
 │   ├── design-offer.md           # this document
-│   └── logo/anomalradiocom-logo.jpeg
+│   └── logo/anomalradiocomlogoweb.jpeg   # web lockup (mark + wordmark)
 ├── public/                       # web root (only static thing nginx serves)
 │   ├── index.html                # landing / tune-in
 │   ├── player/index.html         # player24 console (+ ?popup=1)
@@ -609,7 +610,7 @@ nginx on 81.2.196.19  (TLS via Let's Encrypt)
 | Milestone                             | Deliverable                                                                                                                                                                    | Effort                      |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
 | **M0 — Repo & foundations**           | `git init` + remote `github.com/ullp/anomalradio`, README, `.gitignore` (audio excluded), `package.json`, `.env.example`, lint/format, folder skeleton, `_data/` preserved     | 0.5 d                       |
-| **M1 — Visual prototype (no audio)**  | Design tokens, real logo integrated, `/`, `/player`, `/tracks`, `/track/:id` as clickable static pages with fake data, ECG visualizer, player bar, responsive + a11y pass      | 1–2 d                       |
+| **M1 — Visual prototype (no audio)**  | Design tokens, real logo integrated, `/`, `/player`, `/tracks`, `/track/:id` as clickable pages over the real catalogue, signal visualizer, player bar, responsive + a11y pass | 1–2 d                       |
 | **M2 — Library + protected playback** | Import script, SQLite schema, `/api/playlist`, `/api/session`, `/api/stream/:id` with all Layer-1/2 hardening, working player with autoplay-next, now-playing, last-15 history | 1–2 d                       |
 | **M3 — Continuous radio mode**        | ffmpeg + Icecast with `stream_auth` → Node, scheduler/rotation, ICY metadata, `/api/now-playing` SSE, TUNE IN gate, popup player, listener counter                             | 1–2 d                       |
 | **M4 — Star & share**                 | Favourites (v1) + `/favourites` + M3U export; share buttons; `/track/:id` OG/Twitter meta + JSON-LD                                                                            | 1 d                         |
