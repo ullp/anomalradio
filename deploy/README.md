@@ -78,32 +78,58 @@ main README, "Deployment: two hosts". Oracle is the free way to have the real th
 - The SSH public key you will upload at creation time.
 - Control of DNS for `anomalradio.com`.
 
-### 1. Create the instance
+### 1. Create the instance (the console, click by click)
 
-| Field          | Value                                                                               |
-| -------------- | ----------------------------------------------------------------------------------- |
-| Region         | closest to your audience (Frankfurt or Amsterdam for Europe)                        |
-| Image          | **Ubuntu 24.04** (aarch64)                                                          |
-| Shape          | **VM.Standard.A1.Flex**, 2 OCPU / 12 GB (or `VM.Standard.E2.1.Micro`)               |
-| Boot volume    | 47 GB minimum; 100 GB costs nothing and holds the masters many times over           |
-| Networking     | assign a public IPv4 address                                                        |
-| SSH keys       | upload yours                                                                        |
-| **Cloud-init** | _Advanced options → Management → Cloud-init script_: paste `deploy/cloud-init.yaml` |
+Sign up at <https://signup.cloud.oracle.com>. It is free, but verification asks for a card and a phone
+number even if you never spend. **Your "home region" is permanent** and the Always Free resources are
+created there, so pick one near your audience (Frankfurt or Amsterdam for Europe).
 
-Then wait a few minutes. cloud-init installs Node 24, nginx, certbot and ffmpeg, clones the repo,
-generates `SECRET` on the machine, installs the systemd unit and starts the station. From your
-laptop:
+Then **Compute → Instances → Create instance**:
+
+| Field            | What to choose                                                                                                                |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Name**         | `anomalradio`                                                                                                                 |
+| **Compartment**  | your root compartment (fine)                                                                                                  |
+| **Image**        | _Change image_ → **Canonical Ubuntu** → **24.04** (aarch64 comes with an ARM shape)                                           |
+| **Shape**        | _Change shape_ → **Ampere** → `VM.Standard.A1.Flex` → **2 OCPU / 12 GB** — the most that is still free                        |
+| **Primary VNIC** | defaults are fine; make sure **Assign a public IPv4 address** is _Yes_                                                        |
+| **SSH keys**     | _Upload public key file_ → your `~/.ssh/id_ed25519.pub` (or let the console generate a pair and **download the private key**) |
+| **Boot volume**  | _Specify a custom boot volume size_ → **100 GB** (free up to 200 GB)                                                          |
+| **Cloud-init**   | _Show advanced options_ → **Management** tab → **Cloud-init script** → paste the whole of `deploy/cloud-init.yaml`            |
+
+Click **Create**. Provisioning takes a couple of minutes, then cloud-init runs for another 3–6 minutes
+(package upgrade, Node 24, nginx, certbot, ffmpeg, the repo, the systemd unit).
+
+**What "it worked" looks like.** Note the **Public IP address** on the instance page, then:
 
 ```bash
-ssh ubuntu@<ip> 'systemctl is-active anomalradio && curl -fsS http://127.0.0.1:3000/healthz'
+ssh ubuntu@<ip> 'cloud-init status --long'        # → status: done
+ssh ubuntu@<ip> 'systemctl is-active anomalradio nginx'
+ssh ubuntu@<ip> 'curl -fsS http://127.0.0.1:3000/healthz'
 ```
+
+The last one prints JSON containing `"streaming":true` and a track title. If cloud-init is still
+running, wait. If it reports `error`, this shows which step failed:
+
+```bash
+ssh ubuntu@<ip> 'sudo grep -iE "Traceback|error" /var/log/cloud-init-output.log | tail -20'
+```
+
+Two notes on that file, because both would have bitten us:
+
+- The `users:` block keeps `- default`. cloud-init only creates the distro default user (`ubuntu`)
+  when it is listed, and Oracle puts the SSH key you uploaded into _that_ user — drop it and there is
+  no way into the box except the serial console.
+- `runcmd` runs under `/bin/sh` (dash on Ubuntu), so the steps are POSIX (`set -eu`, no `pipefail`).
+  `set -o pipefail` there is a fatal error, not a warning.
 
 ### 2. Open the ports — in **both** places
 
 This is the step that catches everyone.
 
-1. **The cloud firewall**: in the VCN's default security list, add ingress rules for TCP **80** and
-   **443** from `0.0.0.0/0`.
+1. **The cloud firewall** — _Networking → Virtual Cloud Networks → your VCN → Security Lists →
+   Default Security List → Add Ingress Rules_: Source CIDR `0.0.0.0/0`, IP Protocol **TCP**,
+   Destination Port Range `80,443` (one rule covers both), then **Add Ingress Rules**.
 2. **The host firewall**: Oracle's Ubuntu images ship a persisted iptables ruleset whose INPUT chain
    ends in `REJECT`, so the box answers perfectly on localhost and looks dead from the internet.
    `deploy/cloud-init.yaml` already inserts the ACCEPT rules ahead of that REJECT (position 6, where
@@ -118,6 +144,15 @@ one of these two — in that order.
 At your registrar, change the `A` record for `anomalradio.com` from GitHub Pages
 (`185.199.108–111.153`) to the instance's public IP. Leave `*.anomalradio.com` as it is; the wildcard
 still points at the apex, which is now this box.
+
+**Delete any `AAAA` record.** If one exists and points somewhere else, Let's Encrypt tries IPv6 first:
+a stale AAAA that answers gives a hard failure, and a refused one is not retried over IPv4. It must
+come back empty, and the A record must already be visible from outside before the next step:
+
+```bash
+dig +short AAAA anomalradio.com     # must print nothing
+dig +short A anomalradio.com        # must print the instance's IP
+```
 
 ### 4. Deploy
 
@@ -151,6 +186,19 @@ Certbot answers the HTTP-01 challenge over plain HTTP — which is exactly why t
 configs: the TLS one cannot load before a certificate exists, so the bootstrap config serves HTTP and
 the ACME path until it does. `--tls` refuses to run until the domain resolves. After it succeeds, the
 TLS config is installed and HTTP redirects to HTTPS.
+
+Two things worth knowing:
+
+- **Port 80 stays open forever**, not just for the first issuance — renewal repeats the same HTTP-01
+  challenge every ~60 days, and a firewall that opens only 443 breaks it silently.
+- **A renewal only helps if nginx reloads.** certbot's `--webroot` mode does not touch the running
+  server, so nginx would keep serving the old certificate from memory and the site would break around
+  day 90 even though renewal reported success every time. cloud-init therefore installs a deploy hook
+  at `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx`. Prove the whole loop now, not in two months:
+
+```bash
+ssh ubuntu@<ip> 'sudo certbot renew --dry-run'
+```
 
 ### 7. Prove it
 
@@ -188,7 +236,10 @@ Verified by `npm test` in this repository (see `tests/deploy.test.js`):
 - the systemd unit is unprivileged, confined (`ProtectSystem=strict`), and cannot write next to its
   own code — the only writable path is `/var/lib/anomalradio`;
 - cloud-init generates `SECRET` on the machine, and the repository contains no secret;
-- cloud-init opens 80/443 at the host level, not only in the VCN;
+- cloud-init keeps the distro default user, so the SSH key Oracle injects still works — and its
+  `runcmd` steps stay POSIX, because they run under `/bin/sh` (dash on Ubuntu);
+- cloud-init opens 80/443 at the host level, not only in the VCN, and installs a certbot deploy hook
+  so a renewal actually reaches nginx;
 - the deploy script is strict, never writes a secret, runs app commands as the unprivileged user,
   validates nginx before reloading it, and refuses to claim success if the station is not up.
 
@@ -200,7 +251,7 @@ change, and the Let's Encrypt issuance. Steps 1–7 are the sequence; step 7 is 
 
 ## Fixed while writing this
 
-Writing a runbook means checking that its claims are true, and two were not:
+Writing a runbook means checking that its claims are true, and several were not:
 
 1. **The station files were decorative.** `/radio.pls` and `/radio.m3u` required a browser context (a
    Referer) and issued a token bound to the browser's User-Agent. VLC sends no Referer and is not the
@@ -212,6 +263,19 @@ still refused, the User-Agent denylist still applies, and `/api/session` (the re
 still requires a browser context. Station-file tokens are bound to the requesting address but not to a
 browser, which is what makes the browser→player handoff work. `tests/radio.test.js` now drives that
 handoff end to end, and still refuses a station-file token presented from another address.
+
+**Two more, in the provisioning file itself**, found while writing the console walkthrough above:
+
+3. **It would have locked you out of the box.** The `users:` list did not include `default`, and
+   cloud-init only creates the distro default user when it is listed — so `ubuntu`, the account Oracle
+   injects your SSH key into, would never have existed. (`home:` is also not a cloud-init key; the real
+   one is `homedir:`.)
+4. **`set -o pipefail` in `runcmd`.** Those entries run under `/bin/sh`, which is dash on Ubuntu, where
+   that option is a _fatal_ error rather than a warning — the step would have aborted partway through,
+   leaving a half-provisioned box.
+
+Both are now pinned by tests, because neither fails loudly: one fails at login, the other only in
+console output nobody reads on a good day.
 
 ## Cost
 

@@ -231,6 +231,32 @@ describe('cloud-init (first boot on the free box)', () => {
     assert.match(cloudInit, /iptables -I INPUT 6 -p tcp --dport "\$port" -m state --state NEW -j ACCEPT/);
     assert.match(cloudInit, /netfilter-persistent save/);
   });
+
+  it('keeps the distro default user, so the uploaded SSH key still works', () => {
+    // cloud-init creates the distro default user (ubuntu) only when it is listed,
+    // and Oracle injects the SSH key you uploaded into that user. Omitting it
+    // locks you out of a brand-new instance with no way back but the serial console.
+    assert.match(cloudInit, /^ {2}- default$/m);
+    // ...and the service account must use cloud-init's real key name, `homedir`.
+    assert.match(cloudInit, /^ {4}homedir: \/var\/lib\/anomalradio$/m);
+    assert.doesNotMatch(cloudInit, /^ {4}home: /m);
+  });
+
+  it('keeps runcmd POSIX, because it runs under /bin/sh (dash)', () => {
+    // `set -o pipefail` is a bashism and is a *fatal* error in dash, which would
+    // abort the whole step — and on Ubuntu /bin/sh is dash.
+    const runcmd = cloudInit.slice(cloudInit.indexOf('\nruncmd:'));
+    assert.match(runcmd, /^ {4}set -eu$/m);
+    assert.doesNotMatch(runcmd, /pipefail|compgen/);
+  });
+
+  it('reloads nginx after a certificate renewal', () => {
+    // certbot's --webroot path does not reload the server, so without this hook
+    // nginx keeps serving the old certificate from memory and the site breaks
+    // around day 90, even though every renewal reported success.
+    assert.match(cloudInit, /\/etc\/letsencrypt\/renewal-hooks\/deploy\/reload-nginx/);
+    assert.match(cloudInit, /nginx -t && systemctl reload nginx/);
+  });
 });
 
 describe('deploy script', () => {

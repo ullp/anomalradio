@@ -16,6 +16,10 @@
 #  Every runcmd item is a literal block scalar (`- |`). Do not convert them to
 #  flow scalars: YAML folds line breaks inside quotes into spaces, which would
 #  silently collapse a whole shell script into one line.
+#
+#  runcmd entries are executed by /bin/sh, which is dash on Ubuntu — so they stay
+#  POSIX (`set -eu`, no `pipefail`, no `compgen`). Anything needing bash lives in a
+#  file with an explicit shebang.
 # ─────────────────────────────────────────────────────────────────────────────
 
 package_update: true
@@ -35,10 +39,18 @@ packages:
   - iptables-persistent # so the firewall change below survives a reboot
 
 users:
+  # `default` MUST stay in this list. cloud-init creates the distro default user
+  # (ubuntu) only when it is listed, and Oracle injects the SSH key you uploaded
+  # into that user — leave it out and there is no way to log in to the box.
+  - default
+  # The account the systemd unit runs as: no login, and it owns nothing but
+  # /var/lib/anomalradio.
   - name: anomalradio
     system: true
-    # npm needs a writable HOME; this is also where all state lives.
-    home: /var/lib/anomalradio
+    # The key is `homedir`, not `home`. npm needs a writable HOME, and this is also
+    # where all state lives. cloud-init does not create a system user's home, so
+    # runcmd below creates it explicitly.
+    homedir: /var/lib/anomalradio
     shell: /usr/sbin/nologin
     lock_passwd: true
 
@@ -49,13 +61,24 @@ write_files:
       APT::Periodic::Update-Package-Lists "1";
       APT::Periodic::Unattended-Upgrade "1";
 
+  # A renewal is useless if nginx keeps serving the old certificate out of memory:
+  # certbot's --webroot path does not reload the server. This deploy hook fires
+  # after every successful renewal. Without it the site breaks around day 90 — the
+  # certificate expires even though renewal "succeeded" every time.
+  - path: /etc/letsencrypt/renewal-hooks/deploy/reload-nginx
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      nginx -t && systemctl reload nginx
+
   # One-command go-live: obtain the certificate, then install the TLS config.
   # Requires DNS for anomalradio.com to already point at this instance.
   - path: /usr/local/bin/anomalradio-cert
     permissions: '0755'
     content: |
       #!/bin/bash
-      set -euo pipefail
+      set -eu
       DOMAIN="anomalradio.com"
       EMAIL="${CERTBOT_EMAIL:-}"
       certbot certonly --webroot --webroot-path /var/www/html \
@@ -67,20 +90,20 @@ write_files:
 runcmd:
   # ── Node 24 (arm64 build, from the official NodeSource repository) ──
   - |
-    set -euo pipefail
+    set -eu
     curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
     apt-get install -y nodejs
     node --version
   # ── directories ──
   - |
-    set -euo pipefail
+    set -eu
     install -d -o anomalradio -g anomalradio -m 0750 /var/lib/anomalradio/data /var/lib/anomalradio/media
     install -d -o anomalradio -g anomalradio -m 0750 /srv/anomalradio-inbox
     install -d -o root -g anomalradio -m 0750 /etc/anomalradio
     install -d -m 0755 /var/www/html
   # ── the code ──
   - |
-    set -euo pipefail
+    set -eu
     if [ ! -d /srv/anomalradio/.git ]; then
       git clone --depth 1 https://github.com/ullp/anomalradio.git /srv/anomalradio
     fi
@@ -89,7 +112,7 @@ runcmd:
     runuser -u anomalradio -- env HOME=/var/lib/anomalradio npm ci --omit=dev
   # ── environment: SECRET generated here, never committed ──
   - |
-    set -euo pipefail
+    set -eu
     cd /srv/anomalradio
     ENV_FILE=/etc/anomalradio/anomalradio.env
     if [ ! -f "$ENV_FILE" ]; then
@@ -98,14 +121,14 @@ runcmd:
     fi
   # ── systemd unit ──
   - |
-    set -euo pipefail
+    set -eu
     cd /srv/anomalradio
     install -m 0644 deploy/systemd/anomalradio.service /etc/systemd/system/anomalradio.service
     systemctl daemon-reload
     systemctl enable anomalradio
   # ── nginx: bootstrap config until a certificate exists ──
   - |
-    set -euo pipefail
+    set -eu
     cd /srv/anomalradio
     install -m 0644 deploy/nginx/bootstrap.conf /etc/nginx/sites-available/anomalradio
     ln -sf ../sites-available/anomalradio /etc/nginx/sites-enabled/anomalradio
@@ -115,7 +138,7 @@ runcmd:
     systemctl reload nginx
   # ── start the station and prove it answers ──
   - |
-    set -euo pipefail
+    set -eu
     systemctl restart anomalradio
     sleep 3
     curl -fsS http://127.0.0.1:3000/healthz
@@ -129,7 +152,7 @@ runcmd:
   # Related: outbound port 25 is blocked on every OCI tenancy, so magic-link
   # email (M4) has to go through an email API rather than SMTP from this box.
   - |
-    set -euo pipefail
+    set -eu
     for port in 80 443; do
       iptables -C INPUT -p tcp --dport "$port" -m state --state NEW -j ACCEPT 2>/dev/null ||
         iptables -I INPUT 6 -p tcp --dport "$port" -m state --state NEW -j ACCEPT
