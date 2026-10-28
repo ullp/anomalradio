@@ -336,10 +336,12 @@ export function createRouter({
       const state = broadcastState();
       return sendJson(res, 200, {
         status: 'ok',
-        mode: 'prototype over production storage',
+        mode: 'station',
         storage: storage.driver,
+        streaming: Boolean(radio),
         onAir: state?.now.track.title ?? null,
-        listeners: state?.station.listeners ?? 0,
+        // The real number of open mount connections, not a simulation.
+        listeners: radio ? radio.listenerCount() : (state?.station.listeners ?? 0),
         uptimeSeconds: Math.round(process.uptime()),
       });
     }
