@@ -140,7 +140,7 @@ export function createRouter({
         sort: url.searchParams.get('sort') ?? 'album',
       });
       return sendJson(res, 200, {
-        dev: true,
+        dev: !config.isProduction,
         album: catalogue().album,
         trackCount: tracks.length,
         totalDurationMs: tracks.reduce((sum, track) => sum + track.durationMs, 0),
@@ -152,7 +152,7 @@ export function createRouter({
     if (resource === 'tracks' && param && req.method === 'GET') {
       const track = getTrack(param);
       if (!track) return sendJson(res, 404, { error: 'track-not-found' });
-      return sendJson(res, 200, { dev: true, track: sanitizeTrack(track), album: catalogue().album });
+      return sendJson(res, 200, { dev: !config.isProduction, track: sanitizeTrack(track), album: catalogue().album });
     }
 
     // GET /api/now-playing
@@ -199,7 +199,7 @@ export function createRouter({
       });
 
       return sendJson(res, 200, {
-        dev: true,
+        dev: !config.isProduction,
         token: issued.token,
         expiresAt: issued.expiresAt,
         ttlSeconds: issued.ttlSeconds,
@@ -226,7 +226,7 @@ export function createRouter({
 
       const onAir = radio?.nowPlaying();
       return sendJson(res, 200, {
-        dev: true,
+        dev: !config.isProduction,
         streaming: Boolean(radio),
         station: { ...state.station, listeners: radio ? radio.listenerCount() : state.station.listeners },
         now: state.now,

@@ -16,3 +16,6 @@ deploy/nginx/
 deploy/systemd/
 deploy/bin/
 deploy/env.production.example
+
+# Shell scripts: prettier has no parser for them.
+*.sh

@@ -32,3 +32,22 @@ jobs:
 
       - name: Test
         run: npm test
+
+  nginx:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # The deploy configs are otherwise only checked by regex, and a regex cannot tell
+      # you that nginx accepts the file. ubuntu-latest ships the same nginx 1.24 as the
+      # Ubuntu 24.04 instance, so a directive that needs a newer version fails here rather
+      # than at go-live, where there is no shell to fix it.
+      - name: Install nginx
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq nginx
+
+      - name: Verify the deploy nginx configs
+        run: bash scripts/verify-nginx.sh

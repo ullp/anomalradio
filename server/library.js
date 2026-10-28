@@ -182,7 +182,7 @@ export function broadcastState(nowMs = Date.now()) {
   );
 
   return {
-    dev: true,
+    dev: !config.isProduction,
     simulated: true,
     station: {
       name: 'Anomalradio',

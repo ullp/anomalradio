@@ -149,7 +149,10 @@ describe('nginx — the two load-bearing rules', () => {
   });
 
   it('the TLS config serves HTTPS, redirects HTTP and pins HSTS', () => {
-    assert.match(nginxTls, /listen 443 ssl;/);
+    // `listen ... http2`, not `http2 on;`: the target is Ubuntu 24.04, whose nginx is
+    // 1.24, where `http2 on;` is an unknown directive and nginx refuses to start.
+    assert.match(nginxTls, /listen 443 ssl http2;/);
+    assert.doesNotMatch(directives(nginxTls), /^http2 on;$/m);
     assert.match(nginxTls, /ssl_certificate\s+\/etc\/letsencrypt\/live\/anomalradio\.com\/fullchain\.pem;/);
     assert.match(nginxTls, /ssl_certificate_key\s+\/etc\/letsencrypt\/live\/anomalradio\.com\/privkey\.pem;/);
     assert.match(nginxTls, /return 301 https:\/\/\$host\$request_uri;/);
