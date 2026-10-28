@@ -34,7 +34,10 @@ jobs:
         run: npm test
 
   nginx:
-    runs-on: ubuntu-latest
+    # Pinned, not `ubuntu-latest`: the value of this job is that its nginx is the same
+    # version the instance runs. The `ubuntu-latest` label is migrating to Ubuntu 26,
+    # which would quietly move the gate onto a newer nginx and stop testing the target.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
