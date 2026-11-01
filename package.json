@@ -15,6 +15,7 @@
     "import": "node scripts/import-tracks.js",
     "buy-links": "node scripts/buy-links.js",
     "admin:passwd": "node scripts/admin-passwd.js",
+    "admin:setup": "node scripts/admin-setup.js",
     "test": "node --test 'tests/**/*.test.js'",
     "lint": "eslint .",
     "format": "prettier --write ."

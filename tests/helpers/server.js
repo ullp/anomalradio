@@ -52,6 +52,9 @@ export async function startTestServer(options = {}) {
   process.env.LIBRARY_SOURCE_DIR = source;
   process.env.LIBRARY_INDEX = options.import ? exportPath : fixtureIndex;
   process.env.NODE_ENV = 'test';
+  // Never read the developer's .env: the suite must test the environment it sets up, not the
+  // one on this machine. (A local ADMIN_PASSWORD_HASH once broke tests/admin-off.test.js.)
+  process.env.ANOMALRADIO_NO_ENV_FILE = '1';
   for (const [key, value] of Object.entries(options.env ?? {})) process.env[key] = String(value);
 
   if (options.import) {

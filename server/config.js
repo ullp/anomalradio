@@ -13,8 +13,16 @@ import process from 'node:process';
 
 export const ROOT = path.resolve(import.meta.dirname, '..');
 
-/** Minimal .env loader — real environment variables always win. */
+/**
+ * Minimal .env loader — real environment variables always win.
+ *
+ * `ANOMALRADIO_NO_ENV_FILE=1` skips it entirely, and the test harness sets it. Without that, writing
+ * a `.env` on your machine silently changes what the suite is testing: a local ADMIN_PASSWORD_HASH
+ * made "the admin is off by default" fail, which is exactly the kind of local-only pass/fail that
+ * makes a green CI run meaningless.
+ */
 function loadEnvFile() {
+  if (process.env.ANOMALRADIO_NO_ENV_FILE === '1') return;
   try {
     const raw = readFileSync(path.join(ROOT, '.env'), 'utf8');
     for (const line of raw.split('\n')) {
