@@ -128,7 +128,57 @@ Keyboard: `space` play/pause · `←/→` seek · `↑/↓` volume · `S` star �
 | `POST /api/auth/magic-link`              | e-mail a single-use sign-in link (M4)                            |
 | `GET /api/auth/verify?token=…`           | consume the link, set the session cookie (M4)                    |
 | `GET /api/auth/session` · `POST /logout` | who is signed in; end it (M4)                                    |
+| `GET /api/config`                        | how buying works: driver, currency, default price (M5)           |
 | `GET /healthz`                           | liveness                                                         |
+
+Every track in `GET /api/playlist` and `GET /api/tracks/:id` also carries a resolved `purchase`
+object — see [Buying](#buying-where-the-buy-button-goes).
+
+## Buying: where the buy button goes
+
+Streaming is free and stays free. Buying is deliberately **not something this server does**.
+
+Every track carries a `purchase` object, resolved server-side in `server/checkout.js` and attached by
+`library.js#publicTrack` — so `/api/playlist`, `/api/tracks/:id` and the generated static snapshot all
+report the same thing and cannot drift apart:
+
+```json
+{ "kind": "external", "url": "https://payhip.com/b/come", "store": "Payhip" }
+{ "kind": "internal", "priceCents": 199, "currency": "EUR" }
+{ "kind": "none", "reason": "no-store" }
+```
+
+`CHECKOUT_DRIVER` picks the mode:
+
+| Driver               | What happens                                 | Who carries the VAT     |
+| -------------------- | -------------------------------------------- | ----------------------- |
+| `external` (default) | we hand the buyer to a store we do not run   | the store               |
+| `stripe`             | our own Checkout session and download tokens | us — merchant of record |
+| `disabled`           | no buying at all                             | nobody                  |
+
+**Nothing is for sale yet.** With no store connected every track resolves to `none`, and the UI says
+so rather than showing a dead button. Point the whole catalogue at a store with
+`CHECKOUT_EXTERNAL_DEFAULT_URL=…`, or set links per track:
+
+```bash
+cp _data/buy-links.example.json _data/buy-links.json   # ids → https URLs
+npm run buy-links                                      # validate, then write tracks.buy_url
+npm run build:static                                   # refresh the snapshot the static host serves
+```
+
+`npm run buy-links -- --list` prints what is set, `--set <id>=<url>` sets one, `--clear` unsets
+anything no longer listed, and `--dry-run` reports without writing. Nothing is written until the whole
+file validates.
+
+**A buy URL is untrusted input.** It ends up in an `href`, so `isSafeBuyUrl()` _allowlists_ schemes
+rather than blocklisting them: `javascript:`, `data:`, `vbscript:`, protocol-relative URLs, embedded
+whitespace or control characters, and links pointing back at this site are all refused. An invalid
+link reports `invalid-url` rather than silently falling through to a different store — a broken link
+should be visible to the operator.
+
+**One purchase per track.** An external store gives us one URL per track, so a basket of several
+tracks is several purchases. The basket is a shortlist, not a checkout, and the cart page says so
+instead of opening tabs the browser will block.
 
 ## Security model
 
@@ -294,16 +344,18 @@ deploy script that health-checks the result.
 
 ## Roadmap
 
-| Milestone | Scope                                                                                                                                       |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **M0** ✅ | repo, tooling, design tokens, project skeleton                                                                                              |
-| **M1** ✅ | clickable design prototype + working player over a stub API                                                                                 |
-| **M2** ✅ | SQLite catalogue, private storage (local/S3), real HMAC tokens with a request cap, import pipeline, server-rendered share metadata          |
-| **M3** ✅ | continuous mount: one paced endless stream, ICY metadata, listener counts, play history, `.pls`/`.m3u` station files                        |
-| **M4** ✅ | ★ favourites server-side with **magic-link accounts** (no passwords), ⇄ share counters, per-track preview excerpts                          |
-| **M5**    | basket checkout (Stripe or external buy links) + watermarked downloads                                                                      |
-| **M6**    | `/admin`: upload, metadata, covers, rotation weights, dashboard                                                                             |
-| **M7** 🟡 | the station on a Node host: `deploy/` is complete and tested; **go-live needs an Oracle account and a DNS change** — see `deploy/README.md` |
+| Milestone  | Scope                                                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **M0** ✅  | repo, tooling, design tokens, project skeleton                                                                                              |
+| **M1** ✅  | clickable design prototype + working player over a stub API                                                                                 |
+| **M2** ✅  | SQLite catalogue, private storage (local/S3), real HMAC tokens with a request cap, import pipeline, server-rendered share metadata          |
+| **M3** ✅  | continuous mount: one paced endless stream, ICY metadata, listener counts, play history, `.pls`/`.m3u` station files                        |
+| **M4** ✅  | ★ favourites server-side with **magic-link accounts** (no passwords), ⇄ share counters, per-track preview excerpts                          |
+| **M5a** ✅ | buy resolver: one place decides where a track's buy action goes; unsafe URLs refused                                                        |
+| **M5b** ✅ | the basket becomes an honest shortlist with real store links, or says "not for sale yet"                                                    |
+| **M5c**    | Stripe checkout + watermarked, expiring downloads — needs a connected store and a business entity                                           |
+| **M6**     | `/admin`: upload, metadata, covers, rotation weights, dashboard                                                                             |
+| **M7** 🟡  | the station on a Node host: `deploy/` is complete and tested; **go-live needs an Oracle account and a DNS change** — see `deploy/README.md` |
 
 Details, effort estimates and open decisions: [`_data/design-offer.md`](_data/design-offer.md).
 

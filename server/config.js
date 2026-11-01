@@ -183,6 +183,33 @@ export const config = {
     rateLimit: int(process.env.PREVIEW_RATE_LIMIT, 120),
   },
 
+  /* ── checkout (M5): where a track's buy action resolves ── */
+  checkout: {
+    /**
+     * external — hand the buyer off to a store we do not run (Payhip, Bandcamp, …). The default:
+     *            no card data, no order record, and no VAT registration on our side.
+     * stripe   — our own Checkout session plus download tokens. Cheapest per sale, but it makes us
+     *            the merchant of record, so it must be opted into explicitly.
+     * disabled — no buying at all (the UI says so rather than showing dead buttons).
+     */
+    driver: text(process.env.CHECKOUT_DRIVER, 'external'),
+    /** Button label ("Buy on Payhip"). Empty = derive it from the URL's hostname. */
+    storeName: text(process.env.CHECKOUT_STORE_NAME),
+    /** Store-wide fallback for tracks with no individual link. Empty = "not for sale yet". */
+    externalDefaultUrl: text(process.env.CHECKOUT_EXTERNAL_DEFAULT_URL),
+    /** The `id → url` sidecar, written by `npm run buy-links`. */
+    buyLinksFile: resolveFromRoot(process.env.BUY_LINKS_FILE, './_data/buy-links.json'),
+    currency: text(process.env.CURRENCY, 'EUR'),
+    defaultPriceCents: int(process.env.DEFAULT_PRICE_CENTS, 199),
+    stripe: {
+      secretKey: text(process.env.STRIPE_SECRET_KEY),
+      webhookSecret: text(process.env.STRIPE_WEBHOOK_SECRET),
+      /** How long a purchased download link stays valid, and how many times it may be used. */
+      downloadTtlSeconds: int(process.env.DOWNLOAD_TTL, 72 * 3600),
+      maxDownloads: int(process.env.MAX_DOWNLOADS, 3),
+    },
+  },
+
   storage: {
     driver: text(process.env.STORAGE_DRIVER, 'local'),
     /** local driver: directory that holds the private masters (outside the web root). */
@@ -228,6 +255,22 @@ export function assertUsableConfig() {
   }
   if (config.mail.driver === 'http' && (!config.mail.apiUrl || !config.mail.apiKey)) {
     throw new Error('MAIL_DRIVER=http requires MAIL_API_URL and MAIL_API_KEY');
+  }
+  if (!['external', 'stripe', 'disabled'].includes(config.checkout.driver)) {
+    throw new Error(
+      `unknown CHECKOUT_DRIVER "${config.checkout.driver}" (expected external, stripe or disabled)`,
+    );
+  }
+  // Stripe is the only mode that makes us the merchant of record, so it must be fully configured
+  // before it can be switched on — a half-configured checkout would take money and deliver nothing.
+  if (config.checkout.driver === 'stripe') {
+    const missing = ['secretKey', 'webhookSecret'].filter((key) => !config.checkout.stripe[key]);
+    if (missing.length > 0) {
+      const names = missing.map((key) =>
+        key === 'secretKey' ? 'STRIPE_SECRET_KEY' : 'STRIPE_WEBHOOK_SECRET',
+      );
+      throw new Error(`CHECKOUT_DRIVER=stripe requires: ${names.join(', ')}`);
+    }
   }
   if (config.isProduction && !config.publicOrigin.startsWith('https://')) {
     // A sign-in link over http is a link anyone on the path can steal.

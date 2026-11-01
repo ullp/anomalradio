@@ -477,19 +477,26 @@ async function renderTrackPage() {
               h('span', { class: 'stat__label' }, 'buy the file'),
               h('span', { class: 'stat__value mono' }, fmtPrice(track.priceCents, track.currency)),
             ),
-            h(
-              'button',
-              { class: 'btn btn--primary', type: 'button', dataset: { cart: track.id } },
-              h('span', { html: icon('cart') }),
-              'Add to basket',
-            ),
+            track.purchase?.kind === 'external'
+              ? h(
+                  'a',
+                  {
+                    class: 'btn btn--primary',
+                    href: track.purchase.url,
+                    target: '_blank',
+                    rel: 'noopener noreferrer',
+                  },
+                  h('span', { html: icon('external') }),
+                  `Buy on ${track.purchase.store}`,
+                )
+              : h(
+                  'button',
+                  { class: 'btn btn--primary', type: 'button', dataset: { cart: track.id } },
+                  h('span', { html: icon('cart') }),
+                  store.isInCart(track.id) ? 'In basket' : 'Add to basket',
+                ),
           ),
-          h(
-            'p',
-            { class: 'muted text-xs' },
-            'Streaming here is protected and never exposes a file. Buying (M5) is the sanctioned way to download a ' +
-              'watermarked copy of the master.',
-          ),
+          h('p', { class: 'muted text-xs' }, buyNote(track)),
         ),
         h(
           'div',
@@ -586,12 +593,80 @@ function renderFavourites() {
 
 /* ─────────────────────────── basket ─────────────────────────── */
 
+/**
+ * A row's own store link, when the track resolves to one.
+ *
+ * The URL and the store name both come from the server (server/checkout.js), so the client never
+ * builds a purchase URL itself — and a link that failed validation simply is not rendered.
+ */
+const buyLink = (track) => {
+  const purchase = track.purchase;
+  if (purchase?.kind !== 'external') return null;
+  return h(
+    'a',
+    { class: 'btn btn--sm', href: purchase.url, target: '_blank', rel: 'noopener noreferrer' },
+    h('span', { html: icon('external') }),
+    `Buy on ${purchase.store}`,
+  );
+};
+
+/**
+ * The line under the price on a track page. Buying is the only sanctioned route to a file, but it
+ * may not be set up yet — and when it is, the store does the work, not us. Say which.
+ */
+const buyNote = (track) => {
+  const purchase = track.purchase;
+  if (purchase?.kind === 'external') {
+    return `Payment, tax and delivery happen at ${purchase.store} — we never see your card details. The basket keeps a shortlist here.`;
+  }
+  if (purchase?.kind === 'internal') {
+    return 'Checkout runs here: a download link is issued after payment, and it expires.';
+  }
+  return 'Not for sale yet — streaming stays free, and the basket keeps a shortlist for when the shop opens.';
+};
+
 function renderCart() {
   const list = qs('#cart-list');
   const summary = qs('#cart-summary');
   const empty = qs('#cart-empty');
   const checkout = qs('#cart-checkout');
   if (!list) return;
+
+  /**
+   * What the primary button should say and do.
+   *
+   * An external store gives us one URL per track, so a basket of several tracks is several
+   * purchases. We say that plainly rather than opening a pile of tabs the browser will block —
+   * and when nothing is purchasable at all, the button says why instead of looking broken.
+   */
+  const planFor = (items) => {
+    if (items.length === 0) return { enabled: false, label: 'Checkout', note: '' };
+
+    const external = items.map((track) => track.purchase).filter((p) => p?.kind === 'external');
+    if (external.length === 0) {
+      return {
+        enabled: false,
+        label: 'Not for sale yet',
+        note: 'Buying is not set up yet. Streaming stays free, and your shortlist is kept in this browser.',
+      };
+    }
+
+    const urls = [...new Set(external.map((purchase) => purchase.url))];
+    if (urls.length === 1) {
+      return {
+        enabled: true,
+        label: items.length === 1 ? `Buy on ${external[0].store}` : `Buy all on ${external[0].store}`,
+        url: urls[0],
+        note: 'The store handles payment, tax and delivery — we never see your card details.',
+      };
+    }
+
+    return {
+      enabled: false,
+      label: 'Checkout',
+      note: `${urls.length} different store pages — one purchase per track, so use “Buy on …” on each row.`,
+    };
+  };
 
   const draw = () => {
     const items = store.cart();
@@ -614,6 +689,7 @@ function renderCart() {
           h(
             'div',
             { class: 'track-row__actions' },
+            buyLink(track),
             h('button', {
               class: 'btn btn--icon btn--sm',
               type: 'button',
@@ -630,13 +706,19 @@ function renderCart() {
     const total = qs('#cart-total');
     if (total) total.textContent = fmtPrice(store.cartTotal(), items[0]?.currency ?? 'EUR');
     if (empty) empty.hidden = items.length > 0;
-    if (checkout) checkout.disabled = items.length === 0;
+
+    const plan = planFor(items);
+    if (checkout) {
+      checkout.disabled = !plan.enabled;
+      checkout.textContent = plan.label;
+    }
+    const note = qs('#cart-checkout-note');
+    if (note) note.textContent = plan.note;
   };
 
   checkout?.addEventListener('click', () => {
-    toast('Checkout arrives in M5 (Stripe or external buy links) — the basket already works', {
-      iconName: 'info',
-    });
+    const plan = planFor(store.cart());
+    if (plan.url) window.open(plan.url, '_blank', 'noopener');
   });
 
   qs('#cart-clear')?.addEventListener('click', () => {

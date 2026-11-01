@@ -64,9 +64,20 @@ describe('client favourites store', () => {
       'genre',
       'id',
       'priceCents',
+      'purchase',
       'title',
       'year',
     ]);
+  });
+
+  it('keeps the resolved purchase action, so a basket row can link to a store', () => {
+    const purchase = { kind: 'external', url: 'https://payhip.com/b/x', store: 'Payhip' };
+    store.setFavourites([{ ...track, purchase }]);
+    assert.deepEqual(store.favourites()[0].purchase, purchase);
+
+    // and an older cached track without one stays valid rather than crashing the row
+    store.setFavourites([{ ...track, purchase: undefined }]);
+    assert.equal(store.favourites()[0].purchase, null);
   });
 
   it('never blocks the UI on the network', () => {

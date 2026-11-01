@@ -12,6 +12,7 @@
 
 import { all, one, rowToTrack, run } from './db.js';
 import { config } from './config.js';
+import { withPurchase } from './checkout.js';
 
 /**
  * Fields that exist only for the server. Stripping by name (rather than by omission) means adding a
@@ -34,6 +35,13 @@ export function sanitizeTrack(track) {
   for (const field of INTERNAL_TRACK_FIELDS) delete publicTrack[field];
   return publicTrack;
 }
+
+/**
+ * The one shape a track is ever served in: private fields stripped, and "where can this be bought"
+ * resolved. Every public route and the static snapshot builder go through this, so the live API and
+ * the file-only host cannot disagree about a track.
+ */
+export const publicTrack = (track) => sanitizeTrack(withPurchase(track));
 
 /** Album/disc/track order — the rotation the scheduler follows, and how the library reads. */
 const ROTATION_ORDER = `ORDER BY COALESCE(album, '') COLLATE NOCASE,
@@ -113,7 +121,9 @@ export function catalogue() {
       : null,
     trackCount: totals?.count ?? 0,
     totalDurationMs: totals?.duration ?? 0,
-    tracks,
+    // "Where can this be bought" is resolved here, once. `/api/playlist` and the generated static
+    // snapshot both read this envelope, so the live API and the file-only host cannot disagree.
+    tracks: tracks.map(publicTrack),
   };
 }
 
@@ -188,8 +198,7 @@ export function isStarred(ownerKey, trackId) {
   );
 }
 
-export const starCount = (trackId) =>
-  one('SELECT stars FROM tracks WHERE id = ?', trackId)?.stars ?? 0;
+export const starCount = (trackId) => one('SELECT stars FROM tracks WHERE id = ?', trackId)?.stars ?? 0;
 
 /** Idempotent: starring twice is not an error and does not double-count. */
 export function starTrack(ownerKey, trackId) {

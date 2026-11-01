@@ -79,6 +79,40 @@ describe('static snapshot', () => {
     }
   });
 
+  it('carries the resolved purchase action, so the static host matches the API', async () => {
+    const storeOut = path.join(scratch, 'site-with-store');
+    const storeUrl = 'https://payhip.com/Anomalradio';
+
+    // The builder and the API both resolve buying through the same function (server/checkout.js),
+    // so a configured store must appear identically in the snapshot. This is the parity claim.
+    await execFileAsync(
+      process.execPath,
+      [
+        path.join(ROOT, 'scripts/build-static.js'),
+        '--out',
+        storeOut,
+        '--base-url',
+        'https://anomalradio.test',
+      ],
+      {
+        cwd: ROOT,
+        env: {
+          ...process.env,
+          ANOMALRADIO_DB: path.join(scratch, 'absent.db'),
+          CHECKOUT_EXTERNAL_DEFAULT_URL: storeUrl,
+        },
+      },
+    );
+
+    const data = JSON.parse(await readFile(path.join(storeOut, 'data', 'playlist.json'), 'utf8'));
+    assert.ok(data.tracks.length > 0);
+    for (const track of data.tracks) {
+      assert.equal(track.purchase.kind, 'external');
+      assert.equal(track.purchase.url, storeUrl);
+      assert.equal(track.purchase.store, 'Payhip');
+    }
+  });
+
   it('pre-renders one page per track with its own share card', async () => {
     const sample = catalogue.tracks[0];
     const html = await readFile(path.join(out, 'track', sample.id, 'index.html'), 'utf8');

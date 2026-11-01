@@ -49,11 +49,13 @@ function parseArgs(argv) {
  * the build also runs on a machine — or CI — that has neither music nor database.
  */
 async function loadCatalogue() {
+  // Both branches publish through the same function the API uses, so the snapshot cannot disagree
+  // with the live site about what a track is — including where it can be bought.
+  const { publicTrack } = await import('../server/library.js');
+
   if (existsSync(config.dbPath)) {
-    const [{ openDatabase }, { catalogue, sanitizeTrack }] = await Promise.all([
-      import('../server/db.js'),
-      import('../server/library.js'),
-    ]);
+    const { openDatabase } = await import('../server/db.js');
+    const { catalogue } = await import('../server/library.js');
     openDatabase();
     const data = catalogue();
     return {
@@ -61,14 +63,14 @@ async function loadCatalogue() {
       album: data.album,
       trackCount: data.trackCount,
       totalDurationMs: data.totalDurationMs,
-      tracks: data.tracks.map(sanitizeTrack),
+      tracks: data.tracks.map(publicTrack),
     };
   }
 
+  // The committed export still carries `sourceFile`, and it needs a resolved purchase action just as
+  // much as the database does — this is the branch CI takes, with neither music nor a database.
   const exported = JSON.parse(await readFile(config.libraryExport, 'utf8'));
-  const tracks = (exported.tracks ?? [])
-    .filter((track) => track.published !== false)
-    .map(({ sourceFile: _sourceFile, ...track }) => track);
+  const tracks = (exported.tracks ?? []).filter((track) => track.published !== false).map(publicTrack);
 
   return {
     source: 'export',

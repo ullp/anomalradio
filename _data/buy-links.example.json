@@ -1,0 +1,5 @@
+{
+  "_comment": "Copy to _data/buy-links.json, then run `npm run buy-links`. Keys are track ids (see data/tracks.json or /api/playlist); values must be https URLs. Nothing here is applied until the whole file validates.",
+  "ar_Kt0j2bAUde": "https://payhip.com/b/come",
+  "ar_od9TBG6vDa": "https://dwp.bandcamp.com/track/breach"
+}

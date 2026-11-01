@@ -6,7 +6,7 @@
     <title>Basket — Anomalradio.com</title>
     <meta
       name="description"
-      content="Tracks you collected for purchase. Checkout arrives with the shop milestone."
+      content="Tracks you collected for purchase. Buying hands you to the artist's own store."
     />
     <meta name="theme-color" content="#000000" />
     <link rel="icon" href="/assets/img/favicon-32.png" sizes="32x32" />
@@ -48,17 +48,15 @@
               <span class="stat__value mono" id="cart-total">€0.00</span>
             </div>
             <button class="btn btn--primary" type="button" id="cart-checkout" disabled>Checkout</button>
-            <p class="muted text-xs">
-              Two checkout options are on the table for M5: Stripe Checkout with watermarked, expiring
-              download links, or a simple hand-off to an external store link per track (no payment
-              infrastructure at all).
-            </p>
+            <!-- Filled in by pages.js: what the button will do, or why it cannot do anything yet. -->
+            <p class="muted text-xs" id="cart-checkout-note"></p>
           </div>
           <div class="panel stack">
             <span class="stat__label">why buy</span>
             <p class="muted text-xs">
-              Purchases are the only sanctioned way to get a file, and each sold copy carries an ID3 watermark
-              tied to the order — which is a far better anti-piracy measure than any client-side blocking.
+              The basket is a shortlist — it is kept in this browser, and it survives signing in. Streaming
+              here is free and stays free. When a track is for sale, buying hands you to the artist's own
+              store, which handles payment, tax and delivery; no card details ever reach this server.
             </p>
           </div>
         </aside>

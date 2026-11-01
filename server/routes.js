@@ -16,6 +16,7 @@ import {
   getTrack,
   isStarred,
   listTracks,
+  publicTrack,
   recordShare,
   sanitizeTrack,
   starTrack,
@@ -172,7 +173,20 @@ export function createRouter({
         album: catalogue().album,
         trackCount: tracks.length,
         totalDurationMs: tracks.reduce((sum, track) => sum + track.durationMs, 0),
-        tracks: tracks.map(sanitizeTrack),
+        tracks: tracks.map(publicTrack),
+      });
+    }
+
+    // GET /api/config — how buying works, as the client needs to know it. Never a secret.
+    if (resource === 'config' && req.method === 'GET') {
+      return sendJson(res, 200, {
+        dev: !config.isProduction,
+        checkout: {
+          driver: config.checkout.driver,
+          storeName: config.checkout.storeName || null,
+          currency: config.checkout.currency,
+          defaultPriceCents: config.checkout.defaultPriceCents,
+        },
       });
     }
 
@@ -185,7 +199,7 @@ export function createRouter({
       const { ownerKey } = accounts.ownerFor(req);
       return sendJson(res, 200, {
         dev: !config.isProduction,
-        track: { ...sanitizeTrack(track), starred: isStarred(ownerKey, track.id) },
+        track: { ...publicTrack(track), starred: isStarred(ownerKey, track.id) },
         album: catalogue().album,
       });
     }

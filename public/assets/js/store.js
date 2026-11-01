@@ -68,6 +68,9 @@ const slim = (track) => ({
   durationMs: track.durationMs,
   priceCents: track.priceCents ?? null,
   currency: track.currency ?? 'EUR',
+  // Where this track can be bought, resolved server-side (server/checkout.js). Kept with the row so
+  // the basket can render a store link without a second request.
+  purchase: track.purchase ?? null,
 });
 
 export const isFavourite = (id) => state.favourites.some((t) => t.id === id);
