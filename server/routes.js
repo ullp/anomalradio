@@ -24,6 +24,7 @@ import {
 } from './library.js';
 import { normalizeEmail, getAccounts } from './accounts.js';
 import { injectMeta, metaFor, metaForTrack, PAGE_META } from './render.js';
+import { createAdminRouter } from './admin-routes.js';
 import { notFound, parseRange, readJson, sendJson, sendText, serveStatic } from './http.js';
 
 /** ⇪ channels the UI can report. Anything else is counted as `unknown` rather than trusted. */
@@ -55,7 +56,10 @@ export function createRouter({
   storage = getStorage(),
   radio = null,
   accounts = getAccounts(),
+  admin = null,
 } = {}) {
+  // M6: the control room. Absent (or unconfigured) it answers 404, so this costs nothing when off.
+  const adminRouter = admin ? createAdminRouter({ admin, security, tokens, radio }) : null;
   const sseClients = new Set();
   let lastTrackId = null;
 
@@ -552,6 +556,13 @@ export function createRouter({
    * Track permalinks are the interesting case: a shared link must unfurl with the real title.
    */
   async function handlePage(req, res, url, origin) {
+    // The admin UI is served *only* through the gated admin router above, whatever ADMIN_PATH is set
+    // to — otherwise `public/admin/` would be readable at `/admin/` even when the panel lives
+    // somewhere else.
+    if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
+      return notFound(req, res, config.publicDir);
+    }
+
     const permalink = /^\/track\/(ar_[A-Za-z0-9]+)\/?$/.exec(url.pathname);
     if (permalink) {
       const track = getTrack(permalink[1]);
@@ -603,6 +614,12 @@ export function createRouter({
         listeners: radio ? radio.listenerCount() : (state?.station.listeners ?? 0),
         uptimeSeconds: Math.round(process.uptime()),
       });
+    }
+
+    // M6: the admin owns everything under its path, and is gated before anything else looks at it.
+    const adminBase = config.admin.path;
+    if (adminRouter && (url.pathname === adminBase || url.pathname.startsWith(`${adminBase}/`))) {
+      return adminRouter.handle(req, res, url);
     }
 
     // The continuous mount lives at the site root, like a real station's stream URL.

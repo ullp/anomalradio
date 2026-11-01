@@ -1,0 +1,111 @@
+/* The control room. Deliberately plain: it reuses the site's tokens and panels, and adds only what
+   a dense editing surface needs. Nothing here is inline, because the CSP forbids inline styles. */
+
+body[data-page='admin'] {
+  padding-block: var(--space-6, 2rem) var(--space-8, 4rem);
+}
+
+/* Signed out: the login panel only. Signed in: the app only. */
+body[data-signed-in='false'] .admin-only {
+  display: none;
+}
+
+body[data-signed-in='true'] #admin-signin {
+  display: none;
+}
+
+.admin-banner {
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--color-border, #23262d);
+  background: var(--color-panel, #0b0d11);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.admin-banner--error {
+  border-color: var(--color-danger, #e5484d);
+  color: var(--color-danger, #e5484d);
+}
+
+.admin-signin {
+  max-width: 30rem;
+}
+
+.admin-input {
+  background: var(--color-panel, #0b0d11);
+  border: 1px solid var(--color-border, #23262d);
+  border-radius: var(--radius-md, 10px);
+  color: inherit;
+  font: inherit;
+  padding: 0.45rem 0.6rem;
+  min-width: 14rem;
+}
+
+.admin-track {
+  border: 1px solid var(--color-border, #23262d);
+  border-radius: var(--radius-md, 10px);
+  padding: var(--space-3, 0.75rem);
+  display: grid;
+  gap: 0.5rem;
+}
+
+.admin-track--draft {
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+.admin-track__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.5rem;
+}
+
+.admin-grid .field span {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-muted, #8b93a1);
+}
+
+.admin-grid input {
+  width: 100%;
+}
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.admin-status {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-muted, #8b93a1);
+}
+
+.admin-status--ok {
+  color: var(--color-accent, #1b8ef5);
+}
+
+.admin-status--error {
+  color: var(--color-danger, #e5484d);
+}
+
+.admin-audit-row {
+  display: flex;
+  gap: 0.75rem;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-muted, #8b93a1);
+  border-bottom: 1px solid var(--color-border, #23262d);
+  padding-block: 0.3rem;
+}
+
+.admin-audit-row code {
+  color: inherit;
+}

@@ -87,14 +87,27 @@ Switching is `STORAGE_DRIVER=s3` plus the `S3_*` values and one `npm run import`
 ```
 _data/                     source material: brief, offer, logo, music (music + audio are git-ignored)
 data/tracks.json           generated library index (metadata only, no audio)
+media/                     PRIVATE masters and previews (git-ignored, never inside public/)
 public/                    the website — the only thing a web server should ever serve
   assets/css/              tokens · base · components · player
-  assets/js/               api · store · ui · cover · visualizer · player · share · pages
+  assets/js/               api · store · ui · cover · visualizer · player · share · pages · account
   assets/fonts/            Orbitron, Inter, JetBrains Mono (SIL OFL 1.1, self-hosted)
   assets/img/              logo lockup + signal mark + favicons + social card
-scripts/serve.js           zero-dependency prototype server (static + stub API + dev audio)
-scripts/import-tracks.js   library scanner → data/tracks.json
-scripts/fetch-fonts.js     one-off self-hosted font fetch
+  admin/                   the control room shell — reachable only through the gated admin router
+server/                    the station itself
+  index.js                 process entry: the static site, the API and the mount
+  routes.js                the public contract, and nothing else
+  admin.js · admin-routes.js   the control room: credentials first, then the admin API
+  library.js · db.js       catalogue reads/writes, and the single public track shape
+  radio.js · tokens.js     the continuous mount, and the stream tokens that gate it
+  storage/                 the driver interface: local disk, or an S3-compatible bucket
+  checkout.js · buy-links.js   where a buy action resolves, and the id → url sidecar
+  accounts.js · mail.js    magic-link sign-in, and how the link leaves the building
+  security.js · http.js · render.js · config.js
+  importer.js · ffprobe.js · migrations/
+scripts/                   CLIs: import-tracks · buy-links · admin-passwd · build-static · serve · fetch-fonts
+deploy/                    Oracle Always Free provisioning, systemd unit, nginx configs, deploy.sh
+tests/                     the suite, plus a hermetic fixture library
 ```
 
 ## Pages
@@ -108,6 +121,7 @@ scripts/fetch-fonts.js     one-off self-hosted font fetch
 | `/favourites/` | starred tracks, play-all, `.m3u` export                                                   |
 | `/cart/`       | basket and totals (checkout is M5)                                                        |
 | `/about/`      | how the station works, the security model in plain language, terms, privacy               |
+| `/admin/`      | the control room — off unless `ADMIN_PASSWORD_HASH` is set (see below)                    |
 
 Keyboard: `space` play/pause · `←/→` seek · `↑/↓` volume · `S` star · `B` basket · `C` copy link.
 
@@ -180,6 +194,34 @@ should be visible to the operator.
 tracks is several purchases. The basket is a shortlist, not a checkout, and the cart page says so
 instead of opening tabs the browser will block.
 
+## The control room (`/admin`)
+
+The station's own controls. **It is off unless configured**: with no `ADMIN_PASSWORD_HASH` every path
+under it answers 404, so a deployment cannot expose a panel by accident, and the station boots with
+nothing set.
+
+```bash
+npm run admin:passwd -- --password '…' --totp   # prints ADMIN_PASSWORD_HASH and ADMIN_TOTP_SECRET
+```
+
+Add those to `.env`, restart, and `/admin/` gives you the catalogue with drafts included, inline
+editing of every metadata field, publish/unpublish, the buy URL, rotation weights, the on-air
+snapshot, recent plays, and the audit log.
+
+| Gate         | Why it is in this order                                     |
+| ------------ | ----------------------------------------------------------- |
+| `enabled()`  | no hash, no panel — and no half-configured one that 500s    |
+| IP allowlist | optional, checked before anything can be revealed           |
+| session      | rows in `admin_sessions`, so signing out really ends one    |
+| origin       | on every state change, which is what makes CSRF a non-issue |
+
+Sign-in is a password (scrypt, from `node:crypto`) plus an optional TOTP second factor — checked
+against the RFC 6238 test vectors in the suite, so "our TOTP" means the standard rather than merely
+itself. Attempts are rate limited per address, and successes and failures both land in `admin_audit`.
+
+The panel edits exactly the fields the server validates, and the buy URL goes through the same
+`isSafeBuyUrl()` the public site uses — so an unsafe link cannot be stored from either direction.
+
 ## Security model
 
 1. **Storage isolation** — audio lives outside the web root (or in a private bucket) and is addressed only by
@@ -221,7 +263,7 @@ them into SQLite (the `stream_tokens` table already records every issued token) 
 ## Testing
 
 ```bash
-npm test                            # all suites (~35 s, 221 cases)
+npm test                            # all suites (~25 s, 317 cases)
 npm test -- tests/security.test.js  # one file
 ```
 
@@ -230,27 +272,31 @@ something it claims not to leak. It has already caught real defects, including a
 happen in M2, an XSS vector in the server-rendered structured data, an unthrottled mount that behaved like a bulk
 download, and a station file that no player could actually use.
 
-| File                      | What it pins                                                                                                                                    |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `security.test.js`        | the indirection rule, storage isolation, session and stream gating, response hardening, byte ranges, method safety                              |
-| `api-contract.test.js`    | response shapes, status codes, MIME types, the SSE feed, `sanitizeTrack`                                                                        |
-| `broadcast-clock.test.js` | the on-air clock is a pure function of time: gapless history, cyclic rotation, progress                                                         |
-| `tokens.test.js`          | HMAC signature, expiry, track/IP/browser binding, the request cap, revocation, per-IP stats                                                     |
-| `radio.test.js`           | the mount: gating, ICY headers, real-time pacing, fan-out, play history, and the browser→player station-file handoff                            |
-| `deploy.test.js`          | the production boundary: X-Forwarded-For is overwritten not appended, the mount is never buffered, the unit is confined, no secret is committed |
-| `accounts.test.js`        | magic links: single use, expiry, per-address rate limits, hashed tokens, and that signing in **keeps** the stars you already had                |
-| `favourites.test.js`      | ★ and ⇄: per-owner isolation, idempotency, the counters, validation, and that no private field leaks                                            |
-| `preview.test.js`         | the excerpt is mono and shorter than the master, served without a token — and the master still needs one                                        |
-| `production.test.js`      | the configuration the box actually runs: `NODE_ENV=production`, the SECRET requirement, and no dev markers in responses                         |
-| `client-store.test.js`    | the browser store: a ★ reaches the right endpoint with the right method, and never blocks the UI                                                |
-| `importer.test.js`        | import pipeline: storage copy, content-hash rename detection, publication rules, idempotency, exports                                           |
-| `render.test.js`          | server-rendered meta tags, structured data, escaping of untrusted metadata                                                                      |
-| `static-build.test.js`    | the static snapshot the domain serves today: pages, playlist, per-track pages                                                                   |
-| `storage.test.js`         | SigV4 against the AWS documentation example and an independent implementation, local driver, key safety                                         |
-| `limit-streams.test.js`   | the per-IP concurrency cap holds with genuinely parallel connections                                                                            |
-| `limit-rate.test.js`      | token minting is rate limited                                                                                                                   |
-| `token-expiry.test.js`    | a token stops working once its TTL passes                                                                                                       |
-| `library.test.js`         | the real catalogue matches the audio on disk and ids stay stable (skips without `_data/music`)                                                  |
+| File                       | What it pins                                                                                                                                    |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `security.test.js`         | the indirection rule, storage isolation, session and stream gating, response hardening, byte ranges, method safety                              |
+| `api-contract.test.js`     | response shapes, status codes, MIME types, the SSE feed, `sanitizeTrack`                                                                        |
+| `broadcast-clock.test.js`  | the on-air clock is a pure function of time: gapless history, cyclic rotation, progress                                                         |
+| `tokens.test.js`           | HMAC signature, expiry, track/IP/browser binding, the request cap, revocation, per-IP stats                                                     |
+| `radio.test.js`            | the mount: gating, ICY headers, real-time pacing, fan-out, play history, and the browser→player station-file handoff                            |
+| `deploy.test.js`           | the production boundary: X-Forwarded-For is overwritten not appended, the mount is never buffered, the unit is confined, no secret is committed |
+| `accounts.test.js`         | magic links: single use, expiry, per-address rate limits, hashed tokens, and that signing in **keeps** the stars you already had                |
+| `favourites.test.js`       | ★ and ⇄: per-owner isolation, idempotency, the counters, validation, and that no private field leaks                                            |
+| `preview.test.js`          | the excerpt is mono and shorter than the master, served without a token — and the master still needs one                                        |
+| `production.test.js`       | the configuration the box actually runs: `NODE_ENV=production`, the SECRET requirement, and no dev markers in responses                         |
+| `client-store.test.js`     | the browser store: a ★ reaches the right endpoint with the right method, and never blocks the UI                                                |
+| `importer.test.js`         | import pipeline: storage copy, content-hash rename detection, publication rules, idempotency, exports                                           |
+| `render.test.js`           | server-rendered meta tags, structured data, escaping of untrusted metadata                                                                      |
+| `static-build.test.js`     | the static snapshot the domain serves today: pages, playlist, per-track pages                                                                   |
+| `checkout.test.js`         | the buy resolver: the URL-scheme allowlist, precedence, and the `buy-links` CLI                                                                 |
+| `checkout-nostore.test.js` | the shipped state: every track resolves to "not for sale yet", with a reason                                                                    |
+| `admin.test.js`            | the control room: the gate order, scrypt round-trip, RFC 6238 vectors, the IP allowlist, CSRF, audit, revocation                                |
+| `admin-off.test.js`        | with no `ADMIN_PASSWORD_HASH` the whole area is 404 and the station is untouched                                                                |
+| `storage.test.js`          | SigV4 against the AWS documentation example and an independent implementation, local driver, key safety                                         |
+| `limit-streams.test.js`    | the per-IP concurrency cap holds with genuinely parallel connections                                                                            |
+| `limit-rate.test.js`       | token minting is rate limited                                                                                                                   |
+| `token-expiry.test.js`     | a token stops working once its TTL passes                                                                                                       |
+| `library.test.js`          | the real catalogue matches the audio on disk and ids stay stable (skips without `_data/music`)                                                  |
 
 All but the last run against a **committed fixture library** (`tests/fixtures/`: two 800 ms
 generated MP3s plus an index produced by the real scanner), so they are hermetic, fast and
@@ -354,7 +400,8 @@ deploy script that health-checks the result.
 | **M5a** ✅ | buy resolver: one place decides where a track's buy action goes; unsafe URLs refused                                                        |
 | **M5b** ✅ | the basket becomes an honest shortlist with real store links, or says "not for sale yet"                                                    |
 | **M5c**    | Stripe checkout + watermarked, expiring downloads — needs a connected store and a business entity                                           |
-| **M6**     | `/admin`: upload, metadata, covers, rotation weights, dashboard                                                                             |
+| **M6a** ✅ | `/admin`: password + TOTP, session rows, catalogue editing, publish/unpublish, buy links, weights, audit log                                |
+| **M6b**    | `/admin`: upload a track (running the real import pipeline) and upload covers                                                               |
 | **M7** 🟡  | the station on a Node host: `deploy/` is complete and tested; **go-live needs an Oracle account and a DNS change** — see `deploy/README.md` |
 
 Details, effort estimates and open decisions: [`_data/design-offer.md`](_data/design-offer.md).

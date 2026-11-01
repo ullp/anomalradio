@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Control room — Anomalradio</title>
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="icon" href="/assets/img/favicon-32.png" sizes="32x32" />
+    <link rel="stylesheet" href="/assets/css/tokens.css" />
+    <link rel="stylesheet" href="/assets/css/base.css" />
+    <link rel="stylesheet" href="/assets/css/components.css" />
+    <link rel="stylesheet" href="admin.css" />
+  </head>
+  <body data-page="admin" data-signed-in="false">
+    <main class="container page stack-lg">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">control room</span>
+          <h1>Anomalradio</h1>
+          <p class="muted text-sm" id="admin-subtitle">The station's own controls.</p>
+        </div>
+        <form method="post" action="logout" class="admin-only">
+          <button class="btn btn--sm" type="submit">Sign out</button>
+        </form>
+      </div>
+
+      <!--ADMIN_BANNER-->
+
+      <!-- Sign in. A plain form, so it works with JavaScript off; the dashboard below does not. -->
+      <section class="panel stack admin-signin" id="admin-signin">
+        <h2>Sign in</h2>
+        <form method="post" action="login" class="stack">
+          <label class="field">
+            <span>Password</span>
+            <input type="password" name="password" autocomplete="current-password" required autofocus />
+          </label>
+          <label class="field">
+            <span>Authenticator code</span>
+            <input
+              type="text"
+              name="code"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              placeholder="only if TOTP is enabled"
+            />
+          </label>
+          <button class="btn btn--primary" type="submit">Sign in</button>
+        </form>
+        <p class="muted text-xs">
+          Sessions are rows in the database, so signing out here actually ends one. Failed attempts are rate
+          limited per address and written to the audit log.
+        </p>
+      </section>
+
+      <div class="stack-lg admin-only" id="admin-app" hidden>
+        <section class="grid grid-3" id="admin-stats"></section>
+
+        <section class="panel stack">
+          <div class="row-between">
+            <h2>Tracks</h2>
+            <input
+              id="admin-filter"
+              class="admin-input"
+              type="search"
+              placeholder="filter by title, artist, album…"
+            />
+          </div>
+          <div id="admin-tracks" class="stack"></div>
+        </section>
+
+        <section class="panel stack">
+          <div class="row-between">
+            <h2>Recent activity</h2>
+            <div class="row wrap">
+              <button class="btn btn--sm" type="button" id="admin-revoke-tokens">Revoke stream tokens</button>
+              <button class="btn btn--sm" type="button" id="admin-revoke-sessions">End other sessions</button>
+            </div>
+          </div>
+          <div id="admin-audit" class="stack"></div>
+        </section>
+      </div>
+    </main>
+    <script type="module" src="admin.js"></script>
+  </body>
+</html>

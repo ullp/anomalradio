@@ -210,6 +210,24 @@ export const config = {
     },
   },
 
+  /* ── admin (M6): the station's own control room ── */
+  admin: {
+    /** Where it lives. Changing this is tidiness, not security — the API is what is gated. */
+    path: text(process.env.ADMIN_PATH, '/admin').replace(/\/+$/, ''),
+    /** scrypt hash from `npm run admin:passwd`. **Empty means the admin is off entirely.** */
+    passwordHash: text(process.env.ADMIN_PASSWORD_HASH),
+    /** Optional RFC 6238 secret (base32). Empty = password only, no second factor. */
+    totpSecret: text(process.env.ADMIN_TOTP_SECRET),
+    /** Optional IP allowlist. Empty = any address. */
+    ipAllowlist: list(process.env.ADMIN_IP_ALLOWLIST, []),
+    sessionCookie: text(process.env.ADMIN_COOKIE, 'anomalradio_admin'),
+    sessionTtlSeconds: int(process.env.ADMIN_SESSION_TTL, 8 * 3600),
+    /** Sign-in attempts per IP per minute. */
+    loginRateLimit: int(process.env.ADMIN_LOGIN_RATE_LIMIT, 8),
+    /** Upload cap, per file. */
+    maxUploadBytes: int(process.env.ADMIN_MAX_UPLOAD, 200 * 1024 * 1024),
+  },
+
   storage: {
     driver: text(process.env.STORAGE_DRIVER, 'local'),
     /** local driver: directory that holds the private masters (outside the web root). */
@@ -256,6 +274,18 @@ export function assertUsableConfig() {
   if (config.mail.driver === 'http' && (!config.mail.apiUrl || !config.mail.apiKey)) {
     throw new Error('MAIL_DRIVER=http requires MAIL_API_URL and MAIL_API_KEY');
   }
+  // The admin is off unless a usable hash is present, so a deployment cannot expose a control
+  // panel by accident — and nothing has to be configured for the station to boot.
+  if (
+    config.admin.passwordHash &&
+    !/^scrypt\$[0-9]+\$[0-9]+\$[0-9]+\$[A-Za-z0-9_-]+\$[A-Za-z0-9_-]+$/.test(config.admin.passwordHash)
+  ) {
+    throw new Error('ADMIN_PASSWORD_HASH is not a scrypt hash — generate one with `npm run admin:passwd`');
+  }
+  if (!config.admin.path.startsWith('/')) {
+    throw new Error(`ADMIN_PATH must start with "/" (got "${config.admin.path}")`);
+  }
+
   if (!['external', 'stripe', 'disabled'].includes(config.checkout.driver)) {
     throw new Error(
       `unknown CHECKOUT_DRIVER "${config.checkout.driver}" (expected external, stripe or disabled)`,
