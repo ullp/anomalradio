@@ -16,7 +16,7 @@ import { config } from './config.js';
 import { all, one, rowToTrack, run } from './db.js';
 import { MIME, sendJson, sendText } from './http.js';
 import { broadcastState, publicTrack } from './library.js';
-import { setBuyLink } from './buy-links.js';
+import { checkBuyUrlReachable, setBuyLink } from './buy-links.js';
 
 /** The columns the admin may change, and how. Anything not listed is not editable. */
 const EDITABLE = {
@@ -343,6 +343,7 @@ export function createAdminRouter({ admin, security, tokens = null, radio = null
     }
 
     // buyUrl goes through the M5 validator, so an unsafe link cannot be stored from here either.
+    let warning = null;
     if ('buyUrl' in payload) {
       const raw = payload.buyUrl;
       const next = raw === null || raw === undefined || raw === '' ? null : String(raw).trim();
@@ -350,6 +351,16 @@ export function createAdminRouter({ admin, security, tokens = null, radio = null
         try {
           setBuyLink(id, next);
           changed.push('buyUrl');
+          // Saved either way — but say so if the store is not actually there. This is the check that
+          // would have caught `payhip.com/YourStore` being treated as a real link.
+          if (next) {
+            const verdict = await checkBuyUrlReachable(next);
+            // Only a confident 404 is worth saying anything about. A 403 or a timeout is normal for
+            // a server-side check and would just train the operator to ignore warnings.
+            if (verdict.reason === 'not-found') {
+              warning = `Saved, but ${next} answered 404 — is the store live yet?`;
+            }
+          }
         } catch (error) {
           errors.push(`buyUrl: ${error.message}`);
         }
@@ -371,7 +382,7 @@ export function createAdminRouter({ admin, security, tokens = null, radio = null
       admin.audit({ action: 'track.update', target: `${id}:${field}`, ip: admin.clientIp(req) });
     }
 
-    return sendJson(res, 200, { track: publicTrack(currentTrack(id)), changed });
+    return sendJson(res, 200, { track: publicTrack(currentTrack(id)), changed, warning });
   }
 
   async function publishTrack(req, res, id) {

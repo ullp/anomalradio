@@ -19,6 +19,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { createServer } from 'node:http';
 import { ROOT, startTestServer } from './helpers/server.js';
 
 const execFileAsync = promisify(execFile);
@@ -234,6 +235,92 @@ describe('the served contract', () => {
     assert.equal(typeof body.checkout.currency, 'string');
     assert.equal(typeof body.checkout.defaultPriceCents, 'number');
     assert.ok(!/sk_|whsec_|secret/i.test(text), 'config leaked something secret-shaped');
+  });
+});
+
+/* ─────────────────────────── is the link actually there? ─────────────────────────── */
+
+describe('checkBuyUrlReachable', () => {
+  const probe = async (url, options) =>
+    (await import('../server/buy-links.js')).checkBuyUrlReachable(url, options);
+
+  /**
+   * A throwaway server that answers everything with one status, so the verdict table can be pinned
+   * exactly rather than inferred from whatever routes this app happens to expose.
+   */
+  async function statusServer(status) {
+    const server = createServer((_req, res) => {
+      res.writeHead(status, { 'content-type': 'text/html' });
+      res.end('<html></html>');
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    return {
+      url: `http://127.0.0.1:${server.address().port}/store`,
+      close: () => new Promise((resolve) => server.close(resolve)),
+    };
+  }
+
+  it('a 2xx is reachable', async () => {
+    const stub = await statusServer(200);
+    try {
+      const verdict = await probe(stub.url);
+      assert.equal(verdict.reachable, true);
+      assert.equal(verdict.verified, true);
+      assert.equal(verdict.status, 200);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('a 404 is a confident "not found" — the useful answer', async () => {
+    const stub = await statusServer(404);
+    try {
+      const verdict = await probe(stub.url);
+      assert.equal(verdict.reachable, false);
+      assert.equal(verdict.verified, true, 'a 404 is a real answer, not a failure to ask');
+      assert.equal(verdict.reason, 'not-found');
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('a 403 is *unverified*, not broken', async () => {
+    // Storefronts refuse automated checks whether or not the page exists — Payhip answers 403 even
+    // for its own homepage — so this must never be reported as a dead link.
+    const stub = await statusServer(403);
+    try {
+      const verdict = await probe(stub.url);
+      assert.equal(verdict.reachable, false);
+      assert.equal(verdict.verified, false);
+      assert.equal(verdict.reason, 'blocked');
+      assert.equal(verdict.status, 403);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('a 500 is unverified too', async () => {
+    const stub = await statusServer(500);
+    try {
+      const verdict = await probe(stub.url);
+      assert.equal(verdict.reason, 'blocked');
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('a host that will not answer is unverified, and does not throw', async () => {
+    const verdict = await probe('http://127.0.0.1:1/nothing', { timeoutMs: 2000 });
+    assert.equal(verdict.reachable, false);
+    assert.equal(verdict.verified, false);
+    assert.equal(verdict.status, null);
+    assert.ok(verdict.error, 'it should say what went wrong');
+  });
+
+  it('a real page in this app is reachable', async () => {
+    const verdict = await probe(`${ctx.baseUrl}/track/${ctx.track.id}`);
+    assert.equal(verdict.reachable, true);
+    assert.equal(verdict.status, 200);
   });
 });
 

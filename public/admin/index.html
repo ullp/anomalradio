@@ -54,6 +54,9 @@
       </section>
 
       <div class="stack-lg admin-only" id="admin-app" hidden>
+        <!-- Page-level notices. A row is re-rendered after every save, so a warning about a
+             saved value has to live somewhere that survives the re-render. -->
+        <p class="admin-banner" id="admin-notice" role="status" hidden></p>
         <section class="grid grid-3" id="admin-stats"></section>
 
         <section class="panel stack">

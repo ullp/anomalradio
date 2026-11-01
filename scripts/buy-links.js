@@ -26,6 +26,7 @@ function usage() {
       '  --clear         unset links no longer listed in the file\n' +
       '  --list          print the current links as JSON and exit (writes nothing)\n' +
       '  --dry-run       validate and report, but do not write\n' +
+      '  --check         fetch every saved link and report the ones that are dead\n' +
       '  --set k=v       set a single link without touching the file',
   );
 }
@@ -38,6 +39,7 @@ function parseArgs(argv) {
     list: false,
     dryRun: false,
     set: null,
+    check: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -47,6 +49,7 @@ function parseArgs(argv) {
     else if (flag === '--clear') args.clear = true;
     else if (flag === '--list') args.list = true;
     else if (flag === '--dry-run') args.dryRun = true;
+    else if (flag === '--check') args.check = true;
     else if (flag === '--set') args.set = argv[++i];
     else if (flag === '--help' || flag === '-h') {
       usage();
@@ -63,8 +66,15 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv.slice(2));
 
 const { openDatabase } = await import('../server/db.js');
-const { applyBuyLinks, currentBuyLinks, readBuyLinks, setBuyLink, unknownIds, validateBuyLinks } =
-  await import('../server/buy-links.js');
+const {
+  applyBuyLinks,
+  checkBuyUrlReachable,
+  currentBuyLinks,
+  readBuyLinks,
+  setBuyLink,
+  unknownIds,
+  validateBuyLinks,
+} = await import('../server/buy-links.js');
 const { storeLabel } = await import('../server/checkout.js');
 
 openDatabase(args.db);
@@ -73,6 +83,35 @@ openDatabase(args.db);
 if (args.list) {
   process.stdout.write(`${JSON.stringify(currentBuyLinks(), null, 2)}\n`);
   process.exit(0);
+}
+
+// `--check` fetches every saved link. A dead buy button is easy to ship and embarrassing to find
+// later — this is the check that would have caught an example URL being treated as a real store.
+if (args.check) {
+  const entries = Object.entries(currentBuyLinks());
+  if (entries.length === 0) {
+    console.log('no buy links saved yet — nothing to check.');
+    process.exit(0);
+  }
+  let dead = 0;
+  let unverified = 0;
+  for (const [id, url] of entries) {
+    const verdict = await checkBuyUrlReachable(url);
+    if (verdict.reachable) {
+      console.log(`✓ ${id}  ${url}  → ${verdict.status}`);
+    } else if (verdict.reason === 'not-found') {
+      dead += 1;
+      console.log(`✗ ${id}  ${url}  → ${verdict.status}, not found`);
+    } else {
+      // A server-side check is refused by some hosts whether or not the page exists — Payhip answers
+      // 403 even for its own homepage — so this is "could not tell", not "broken".
+      unverified += 1;
+      console.log(`? ${id}  ${url}  → ${verdict.status ?? verdict.error}, could not verify from here`);
+    }
+  }
+  console.log(`
+${entries.length} link(s) checked: ${dead} not found, ${unverified} unverifiable.`);
+  process.exit(dead > 0 ? 1 : 0);
 }
 
 // `--set id=url` is a single edit; the file is not consulted.

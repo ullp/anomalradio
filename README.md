@@ -184,6 +184,21 @@ npm run build:static                                   # refresh the snapshot th
 anything no longer listed, and `--dry-run` reports without writing. Nothing is written until the whole
 file validates.
 
+`npm run buy-links -- --check` fetches every saved link and reports which are dead — worth running after
+a bulk edit, because a buy button that 404s is easy to ship and embarrassing to find later. It answers
+**three** ways, and the distinction is the whole point:
+
+| Verdict        | Meaning                                                    |
+| -------------- | ---------------------------------------------------------- |
+| ✓ reachable    | 2xx/3xx                                                    |
+| ✗ not found    | a **404/410** — a real answer, and the one worth acting on |
+| ? unverifiable | a 403, a 5xx, or no connection. **Not** treated as broken  |
+
+That last row is not a cop-out: storefronts refuse server-side checks whether or not the page exists.
+Payhip answers **403 even for its own homepage**, so a live Payhip store and a dead one are
+indistinguishable from the server. The admin panel applies the same rule — it warns on a saved link
+only when the check came back 404, so a blocked check never raises a false alarm.
+
 **A buy URL is untrusted input.** It ends up in an `href`, so `isSafeBuyUrl()` _allowlists_ schemes
 rather than blocklisting them: `javascript:`, `data:`, `vbscript:`, protocol-relative URLs, embedded
 whitespace or control characters, and links pointing back at this site are all refused. An invalid
@@ -270,7 +285,7 @@ them into SQLite (the `stream_tokens` table already records every issued token) 
 ## Testing
 
 ```bash
-npm test                            # all suites (~30 s, 329 cases)
+npm test                            # all suites (~30 s, 338 cases)
 npm test -- tests/security.test.js  # one file
 ```
 

@@ -364,6 +364,42 @@ describe('editing a track', () => {
     const back = await (await client.get(`/api/tracks/${id}`)).json();
     assert.equal(back.track.id, id);
   });
+
+  it('warns when a saved buy URL is dead — but still saves it', async () => {
+    const id = firstId();
+    const dead = `${ctx.baseUrl}/no-such-store`;
+
+    const { status, body } = await json(
+      await api(`/api/tracks/${id}`, { method: 'PATCH', body: { buyUrl: dead } }),
+    );
+    // Advisory on purpose: a store behind a bot wall or briefly down must not block the operator.
+    assert.equal(status, 200);
+    assert.match(body.warning, /answered 404/);
+    assert.equal(body.track.buyUrl, dead);
+  });
+
+  it('does not warn when the buy URL resolves', async () => {
+    const id = firstId();
+    const live = `${ctx.baseUrl}/track/${id}`;
+    const { body } = await json(
+      await api(`/api/tracks/${id}`, { method: 'PATCH', body: { buyUrl: live } }),
+    );
+    assert.equal(body.warning, null);
+  });
+
+  it('stays quiet when the check was blocked rather than 404', async () => {
+    const id = firstId();
+    // 401 is not a 404, so we cannot tell whether the store exists. Warning here would train the
+    // operator to ignore warnings, which is how a real broken link gets shipped.
+    const { status, body } = await json(
+      await api(`/api/tracks/${id}`, {
+        method: 'PATCH',
+        body: { buyUrl: `${ctx.baseUrl}/admin/api/summary` },
+      }),
+    );
+    assert.equal(status, 200);
+    assert.equal(body.warning, null);
+  });
 });
 
 /* ─────────────────────────── audit and revocation ─────────────────────────── */

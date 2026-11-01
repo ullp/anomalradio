@@ -73,6 +73,15 @@ const fmtBytes = (bytes) => {
   return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 };
 
+/** A page-level message that survives the re-render that follows every save. */
+function notice(message, kind = 'warn') {
+  const node = qs('#admin-notice');
+  if (!node) return;
+  node.textContent = message ?? '';
+  node.className = `admin-banner${kind ? ` admin-banner--${kind}` : ''}`;
+  node.hidden = !message;
+}
+
 function setStatus(node, message, kind = '') {
   if (!node) return;
   node.textContent = message;
@@ -156,6 +165,9 @@ function trackCard(track, refresh) {
     text: track.published ? 'Unpublish' : 'Publish',
   });
 
+  // Clear any previous page-level warning when the operator starts editing again.
+  for (const input of inputs.values()) input.addEventListener('input', () => notice(''));
+
   save.addEventListener('click', async () => {
     const patch = {};
     for (const [name, input] of inputs) {
@@ -178,6 +190,10 @@ function trackCard(track, refresh) {
         method: 'PATCH',
         body: JSON.stringify(patch),
       });
+      // Saved either way — but if the server could not reach the buy URL, say so where it will not
+      // be wiped by the refresh below.
+      if (result.warning) notice(result.warning, 'warn');
+      else notice('');
       setStatus(status, `saved: ${result.changed.join(', ')}`, 'ok');
       await refresh();
     } catch (error) {

@@ -22,6 +22,11 @@ body[data-signed-in='true'] #admin-signin {
   font-size: var(--text-sm, 0.875rem);
 }
 
+.admin-banner--warn {
+  border-color: #d9a441;
+  color: #d9a441;
+}
+
 .admin-banner--error {
   border-color: var(--color-danger, #e5484d);
   color: var(--color-danger, #e5484d);

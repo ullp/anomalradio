@@ -20,6 +20,66 @@ import { config } from './config.js';
 import { isSafeBuyUrl } from './checkout.js';
 import { all, run } from './db.js';
 
+/**
+ * Is this buy URL actually there?
+ *
+ * Three answers, not two, because conflating the last two would be a lie:
+ *
+ *   · `not-found`  — 404/410. Confident: this path does not exist. This is the useful one.
+ *   · `blocked`    — anything else in the 4xx/5xx range, or no connection at all. **Unverified.**
+ *                    Storefronts routinely refuse automated checks: Payhip answers 403 to a server
+ *                    even for its own homepage, so a live Payhip store and a dead one look
+ *                    identical from here. Callers must not treat this as broken.
+ *   · reachable    — a 2xx/3xx.
+ *
+ * Advisory throughout: it returns a verdict rather than throwing, because a store being briefly down
+ * must never stop an operator saving a link they know is right.
+ *
+ * @returns {Promise<{reachable: boolean, verified: boolean, status: number|null, reason?: string, error?: string}>}
+ */
+export async function checkBuyUrlReachable(url, { timeoutMs = 5000 } = {}) {
+  const attempt = async (method) => {
+    const response = await fetch(url, {
+      method,
+      redirect: 'follow',
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: {
+        // A browser-shaped request on purpose: we want to know what a *visitor* would see.
+        'user-agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+        accept: 'text/html,application/xhtml+xml',
+        // The smallest possible body: we only want the status line.
+        ...(method === 'GET' ? { range: 'bytes=0-0' } : {}),
+      },
+    });
+    await response.body?.cancel?.();
+    return response;
+  };
+
+  try {
+    let response = await attempt('HEAD');
+    // A refused or unsupported HEAD says nothing about the page, so ask again properly.
+    if ([403, 405, 501].includes(response.status)) response = await attempt('GET');
+
+    const { status } = response;
+    if (status === 404 || status === 410) {
+      return { reachable: false, verified: true, status, reason: 'not-found' };
+    }
+    if (status >= 400) {
+      return { reachable: false, verified: false, status, reason: 'blocked' };
+    }
+    return { reachable: true, verified: true, status };
+  } catch (error) {
+    return {
+      reachable: false,
+      verified: false,
+      status: null,
+      reason: 'blocked',
+      error: error?.name === 'TimeoutError' ? 'timed out' : 'could not be reached',
+    };
+  }
+}
+
 /** Read the sidecar. A missing file is not an error — it means "nothing is for sale yet". */
 export function readBuyLinks(file = config.checkout.buyLinksFile) {
   let raw;
