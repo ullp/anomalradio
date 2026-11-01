@@ -263,7 +263,7 @@ them into SQLite (the `stream_tokens` table already records every issued token) 
 ## Testing
 
 ```bash
-npm test                            # all suites (~25 s, 317 cases)
+npm test                            # all suites (~30 s, 322 cases)
 npm test -- tests/security.test.js  # one file
 ```
 
@@ -292,6 +292,7 @@ download, and a station file that no player could actually use.
 | `checkout-nostore.test.js` | the shipped state: every track resolves to "not for sale yet", with a reason                                                                    |
 | `admin.test.js`            | the control room: the gate order, scrypt round-trip, RFC 6238 vectors, the IP allowlist, CSRF, audit, revocation                                |
 | `admin-off.test.js`        | with no `ADMIN_PASSWORD_HASH` the whole area is 404 and the station is untouched                                                                |
+| `cli.test.js`              | the startup path: `npm start` boots, prints its banner, serves the site and shuts down on SIGTERM                                               |
 | `storage.test.js`          | SigV4 against the AWS documentation example and an independent implementation, local driver, key safety                                         |
 | `limit-streams.test.js`    | the per-IP concurrency cap holds with genuinely parallel connections                                                                            |
 | `limit-rate.test.js`       | token minting is rate limited                                                                                                                   |
