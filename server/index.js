@@ -81,6 +81,9 @@ export function banner(server) {
   const { port } = server.address();
   const state = broadcastState();
   const storage = server.anomalradio.storage.describe();
+  const { admin } = server.anomalradio;
+  // Reached through the server, not a closure variable: `banner()` is module-level, and referencing
+  // `createServer`'s locals here crashed the CLI on start while the tests stayed green.
   const lines = [
     '',
     '  ANOMALRADIO · M3 (continuous stream)',
