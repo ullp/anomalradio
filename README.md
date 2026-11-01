@@ -285,7 +285,7 @@ them into SQLite (the `stream_tokens` table already records every issued token) 
 ## Testing
 
 ```bash
-npm test                            # all suites (~30 s, 338 cases)
+npm test                            # all suites (~30 s, 343 cases)
 npm test -- tests/security.test.js  # one file
 ```
 
@@ -316,6 +316,7 @@ download, and a station file that no player could actually use.
 | `admin-off.test.js`        | with no `ADMIN_PASSWORD_HASH` the whole area is 404 and the station is untouched                                                                |
 | `cli.test.js`              | the startup path: `npm start` boots, prints its banner, serves the site and shuts down on SIGTERM                                               |
 | `admin-setup.test.js`      | the one-command setup: seeds `.env`, writes a verifiable hash, and refuses to clobber one without `--force`                                     |
+| `workflows.test.js`        | the CI wiring: Pages publishes the snapshot _with_ the store URL, CI installs ffmpeg, and the nginx gate stays on ubuntu-24.04                  |
 | `storage.test.js`          | SigV4 against the AWS documentation example and an independent implementation, local driver, key safety                                         |
 | `limit-streams.test.js`    | the per-IP concurrency cap holds with genuinely parallel connections                                                                            |
 | `limit-rate.test.js`       | token minting is rate limited                                                                                                                   |
